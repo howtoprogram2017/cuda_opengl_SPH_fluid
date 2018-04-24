@@ -115,11 +115,22 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="fluid_system.cuh" />
     <ClInclude Include="GLSLShader.h" />
     <ClInclude Include="PCISPH.h" />
     <ClInclude Include="sphere.h" />
     <ClInclude Include="stb_image.h" />
     <ClInclude Include="timer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\fg.glsl" />
+    <None Include="shader\screen.fs" />
+    <None Include="shader\screen.vt" />
+    <None Include="shader\smooth.fs" />
+    <None Include="shader\updateNorm.fs" />
+    <None Include="shader\vt.glsl" />
+    <None Include="shader\waterfg.glsl" />
+    <None Include="shader\watervt.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

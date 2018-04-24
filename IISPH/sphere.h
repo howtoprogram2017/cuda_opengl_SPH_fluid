@@ -5,7 +5,7 @@
 #define SPHERE_H
 using namespace std;
 
-struct cudaGraphicsResource *cuda_vbo_resource;
+struct cudaGraphicsResource *cuda_vbo_resource[2];
 class sphere{
 
 public:
@@ -57,13 +57,11 @@ public:
 
 	};
 	void generateBuffer() {
-		unsigned int VBO, VAO, EBO, Location;
+		unsigned int VBO, VAO, EBO, Location[2];
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		glGenBuffers(1, &EBO);
-		glGenBuffers(1, &Location);
-	
-		
+		glGenBuffers(2, &Location[0]);
 		//glEnableVertexAttribArray(0);
 		glBindVertexArray(VAO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -74,24 +72,12 @@ public:
 		glEnableVertexAttribArray(0);
 		//GLuint Location;
 		//glGenBuffers(1, &Location);
-		vector<float> loc = { 0,0,0,
-			.2f,0.2f,-0.5f,
-			-.5f,-0.3f,-0.0f };
-		glBindBuffer(GL_ARRAY_BUFFER, Location);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float)*loc.size(), &(loc[0]), GL_STATIC_DRAW);
-
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-		glEnableVertexAttribArray(1);
-		cudaGraphicsGLRegisterBuffer(&cuda_vbo_resource, Location, cudaGraphicsRegisterFlagsNone);
-		cudaGraphicsMapResources(1, &cuda_vbo_resource, 0);
+		
 	
 		
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER,sizeof(int)*indices.size(),&(indices[0]),GL_STATIC_DRAW);
 		this->VAO = VAO; this->VBO = VBO;
-		// texture coord attribute
-		/*glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-		glEnableVertexAttribArray(1);*/
 	}
 	GLuint getVBO() {
 		return VBO;

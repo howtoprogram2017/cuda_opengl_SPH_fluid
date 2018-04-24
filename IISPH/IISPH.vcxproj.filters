@@ -1,9 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="GLSLShader.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -21,6 +18,9 @@
     <ClInclude Include="PCISPH.h">
       <Filter>particleSystem</Filter>
     </ClInclude>
+    <ClInclude Include="fluid_system.cuh">
+      <Filter>particleSystem</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="rendertool">
@@ -29,5 +29,39 @@
     <Filter Include="particleSystem">
       <UniqueIdentifier>{720dd1dd-e145-4aa9-9455-ca17c167a42f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="shaderResource">
+      <UniqueIdentifier>{0c659672-20c5-4218-873c-a85c95976003}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="kernel.cu">
+      <Filter>particleSystem</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\fg.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\vt.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\waterfg.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\watervt.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\screen.fs">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\screen.vt">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\smooth.fs">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\updateNorm.fs">
+      <Filter>shaderResource</Filter>
+    </None>
   </ItemGroup>
 </Project>

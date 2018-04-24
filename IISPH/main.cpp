@@ -7,6 +7,7 @@
 #include <cstdio>
 //#include <time.h>
 #include "timer.h"
+#include "fluid_system.cuh"
 #include "GLSLShader.h"
 #include <glfw/glfw3.h>
 #include <glm/glm.hpp>
@@ -18,13 +19,13 @@
 #include <GL/glew.h>
 #include <vector>
 #include "sphere.h"
-#include "PCISPH.h"
+
 //#include <cmath>
 using namespace glm;
 
 GLFWwindow* window;
 const int SCR_WIDTH = 1024;
-const int SCR_HEIGHT = 768;
+const int SCR_HEIGHT = 1024;
 float angleX = 0;
 float angleY = 0;
 float oldangleX = angleX;
@@ -43,12 +44,13 @@ mat4 viewMatrix = lookAt(vec3(0, 0, -3), vec3(0, 0, 0), vec3(0, 1, 0));//glm::tr
 float mdistance = 3; vec3 eyepos = vec3(0, 0, -3);
 mat4 projectionMatrix = perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 #define testDuration(x) timer.start(); x; timer.stop();std::cout << timer.duration() << "ms" << std::endl;
-
 extern "C" cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
-extern "C" cudaError_t subWithCuda(int *c, const int *a, const int *b, unsigned int size);
-extern "C" void advectParticles(GLuint vbo, float *v);
+//extern "C" cudaError_t subWithCuda(int *c, const int *a, const int *b, unsigned int size);
+//extern "C" void advectParticles(GLuint vbo);
+//extern "C" GLuint Location[2];
 Timer timer;
+particleSystem particle;
 
 void GetCursorPos(double&x, double&y) {
 	double x1, y1;
@@ -108,14 +110,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		double x, y;
 		GetCursorPos(x, y);
 		oldPosX = x; oldPosY = y;
-		/*auto raydes1 = inverse(projectionMatrix*viewMatrix)*vec4(x / (SCR_WIDTH / 2), y / (SCR_HEIGHT / 2), 1.0, 1);
-		auto raydir = vec3(raydes1) / raydes1.w - eyepos;
-		auto minpos = make_pair(-(TEX_WIDTH*details) / 2, -(TEX_HEIGHT*details) / 2);
-		auto maxpos = make_pair(TEX_WIDTH*details / 2, TEX_HEIGHT*details / 2);
-		auto result = mRaytracer.HitAxisAlinedPlane(eyepos, raydir, minpos, maxpos);
-		if (result.first)
-			Mode = DragWater;
-		else*/
+
 			Mode = DragRotate;
 
 	}
@@ -163,7 +158,22 @@ float vertices[] = {
 	-0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
 	0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
 };
+float quadVertices[] = { // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
+	 // positions   // texCoords
+	-1.0f,  1.0f,  0.0f, 1.0f,
+	-1.0f, -1.0f,  0.0f, 0.0f,
+	1.0f, -1.0f,  1.0f, 0.0f,
 
+	-1.0f,  1.0f,  0.0f, 1.0f,
+	1.0f, -1.0f,  1.0f, 0.0f,
+	1.0f,  1.0f,  1.0f, 1.0f
+};
+void UserInputSetup() {
+	glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetKeyCallback(window, key_callback);
+	glfwSetScrollCallback(window, scroll_callback);
+}
 int main()
 {
 	const int arraySize = 500;
@@ -179,12 +189,7 @@ int main()
 		cudaError_t cudaStatus;
 		int k = 100;
 		testDuration(addWithCuda(c, a, b, arraySize);)
-	k = 100;
-	cudaStatus = cudaDeviceReset();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaDeviceReset failed!");
-		return 1;
-	}
+			testf();
 	if (!glfwInit())
 	{
 		fprintf(stderr, "Failed to initialize GLFW\n");
@@ -220,8 +225,10 @@ int main()
 
 	//glCreateShader(GL_VERTEX_SHADER);
 	GLSLShader render = GLSLShader::createFromShaderFile("shader/vt.glsl", "shader/fg.glsl");
-	GLSLShader water = GLSLShader::createFromShaderFile("shader/watervt.glsl", "shader/waterfg.glsl");
-
+	GLSLShader CubeRender = GLSLShader::createFromShaderFile("shader/watervt.glsl", "shader/waterfg.glsl");
+	GLSLShader screen = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/screen.fs");
+	GLSLShader Smooth = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/smooth.fs");
+	GLSLShader UpadeNorm = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/updateNorm.fs");
 	//render.Use();
 	unsigned int VBO, VAO;
 	glGenVertexArrays(1, &VAO);
@@ -240,38 +247,60 @@ int main()
 	glEnableVertexAttribArray(1);
 	//setup for sphere drawing
 	
-
-	sphere testsphere(8,0.5);
+	sphere testsphere(8,radius);
 	testsphere.generateBuffer();
-	unsigned int VBO1, VAO1, EBO;
-	vector<float> pointData = { -0.0,0.0,0,-0.0,-0.0,0,0.0,0,0 };
-	glGenVertexArrays(1, &VAO1);
-	glGenBuffers(1, &VBO1);
-	glGenBuffers(1, &EBO);
-
-	glBindVertexArray(VAO1);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, VBO1);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*pointData.size(), &(pointData[0]), GL_STATIC_DRAW);
-
-	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-//	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int)*indices.size(), &(indices[0]), GL_STATIC_DRAW);
-	//this->VAO = VAO; this->VBO = VBO;
-	
+	particle.particleStepUp();
 	
 
 	// Ensure we can capture the escape key being pressed below
-	glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-	glfwSetKeyCallback(window, key_callback);
-	glfwSetScrollCallback(window, scroll_callback);
+	UserInputSetup();
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
+	//{
+		unsigned int quadVAO, quadVBO;
+		glGenVertexArrays(1, &quadVAO);
+		glGenBuffers(1, &quadVBO);
+		glBindVertexArray(quadVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+		unsigned int framebuffer,framebuffer1;
+		glGenFramebuffers(1, &framebuffer);
+		glGenFramebuffers(1, &framebuffer1);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+		unsigned int DepthNormTex, DepthNormTex1;
+		glGenTextures(1, &DepthNormTex);
+		glGenTextures(1, &DepthNormTex1);
+		glBindTexture(GL_TEXTURE_2D, DepthNormTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, DepthNormTex, 0);
+
+	
+		// create a renderbuffer object for depth and stencil attachment (we won't be sampling these)
+		unsigned int rbo;
+		glGenRenderbuffers(1, &rbo);
+		glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo); // now actually attach it
+		
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer1);
+		glBindTexture(GL_TEXTURE_2D, DepthNormTex1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, DepthNormTex1, 0);
+	//}
+
 	
 
 	do {
@@ -279,31 +308,107 @@ int main()
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
-		eyepos = glm::rotateX(vec3(0, 0.0, -mdistance), radians(-angleY));
-		eyepos = rotateY(eyepos, radians(-angleX));
-		viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
-		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
-		glEnable(GL_CULL_FACE);
-		glCullFace(GL_BACK);
-		render.Use();
-		glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
-		//glEnable(GL_DEPTH_TEST);
-		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, 30);
-		glDisable(GL_CULL_FACE);
-		// Draw nothing, see you in tutorial 2 !
-		water.Use();
-		glUniformMatrix4fv(water("MVP"),1,GL_FALSE, value_ptr(mvp));
-		glBindVertexArray(testsphere.getVAO());
+		//eyepos = glm::rotateX(vec3(0, 0.0, -mdistance), radians(-angleY));
+		//eyepos = rotateY(eyepos, radians(-angleX));
+		//viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
+		//glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+		//mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
+		//glEnable(GL_CULL_FACE);
+		//glCullFace(GL_FRONT);
+		//render.Use();
+		//glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
+		////glEnable(GL_DEPTH_TEST);
+		//glBindVertexArray(VAO);
+		//glDrawArrays(GL_TRIANGLES, 0, 30);
+		//glDisable(GL_CULL_FACE);
+		//// Draw nothing, see you in tutorial 2 !
+		//water.Use();
+		//glUniformMatrix4fv(water("MVP"),1,GL_FALSE, value_ptr(mvp));
+		//glBindVertexArray(testsphere.getVAO());
 		//glDrawArrays(GL_TRIANGLES,0, 3 );
-		//glBindBuffer(GL_ARRAY_BUFFER, Location);
-		//advectParticles(&loc);
-		//glEnableVertexAttribArray(1);
-		advectParticles(1, &pointData[0]);
-		glVertexAttribDivisor(0, 0); // particles vertices : always reuse the same 4 vertices -> 0
-		glVertexAttribDivisor(1, 1);
-		glDrawElementsInstanced(GL_TRIANGLES, testsphere.getElementSize(), GL_UNSIGNED_INT, 0,3);
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+			glEnable(GL_DEPTH_TEST); // enable depth testing (is disabled for rendering screen-space quad)
+			//glDepthMask(GL_FALSE);
+									 // make sure we clear the framebuffer's content
+			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+			eyepos = glm::rotateX(vec3(0, 0.0, -mdistance), radians(-angleY));
+			eyepos = rotateY(eyepos, radians(-angleX));
+			viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
+			glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+			mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+			render.Use();
+
+			glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
+			glUniformMatrix4fv(render("ViewMatrix"), 1, GL_FALSE, value_ptr(viewMatrix));
+
+			glUniform3fv(render("eyePos"),1,value_ptr(eyepos));
+			//glEnable(GL_DEPTH_TEST);
+			glBindVertexArray(VAO);
+			glEnable(GL_PROGRAM_POINT_SIZE);
+			//glPointSize(50);
+			
+			glEnable(GL_POINT_SPRITE);
+			glDepthRange(0.0, 10.0f);
+			glDrawArrays(GL_POINTS, 0, 12);
+			glDisable(GL_CULL_FACE);
+			glDisable(GL_PROGRAM_POINT_SIZE);	
+			glDisable(GL_POINT_SPRITE);
+			glDisable(GL_DEPTH_TEST);
+			int i = 5;
+			while (i-->0)
+			{
+				//UpadeNorm.Use();
+				UpadeNorm.Use();
+
+				glBindFramebuffer(GL_FRAMEBUFFER, framebuffer1);
+				glClear(GL_COLOR_BUFFER_BIT);
+				//glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
+				glBindVertexArray(quadVAO);
+				glBindTexture(GL_TEXTURE_2D, DepthNormTex);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+				swap(DepthNormTex, DepthNormTex1);
+				swap(framebuffer,framebuffer1);
+				Smooth.Use();
+				glBindFramebuffer(GL_FRAMEBUFFER, framebuffer1);
+				glClear(GL_COLOR_BUFFER_BIT);
+				//glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
+				glBindVertexArray(quadVAO);
+				glBindTexture(GL_TEXTURE_2D, DepthNormTex);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+				swap(DepthNormTex, DepthNormTex1);
+				swap(framebuffer, framebuffer1);
+			}
+			
+			 // disable depth test so screen-space quad isn't discarded due to depth test.
+									  // clear all relevant buffers
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glClearColor(.5f, .1f, 1.0f, 1.0f); // set clear color to white (not really necessery actually, since we won't be able to see behind the quad anyways)
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			screen.Use();
+			glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
+			glBindVertexArray(quadVAO);
+			glBindTexture(GL_TEXTURE_2D, DepthNormTex);	// use the color attachment texture as the texture of the quad plane
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glDisable(GL_DEPTH_TEST);
+			//swap(DepthNormTex, DepthNormTex1);
+			//swap(framebuffer,framebuffer1);
+		}
+
+		particle.step();
+		{
+			//glBindBuffer(GL_ARRAY_BUFFER,particle.getRenderVBO());
+			//glVertexAttribDivisor(0, 0); // particles vertices : always reuse the same 4 vertices -> 0
+			//glVertexAttribDivisor(1, 1);
+			//glDrawElementsInstanced(GL_TRIANGLES, testsphere.getElementSize(), GL_UNSIGNED_INT, 0,particle.getParticleNum());
+		}
+		
 		// Swap buffers
 		glfwSwapBuffers(window);
 		glfwPollEvents();
