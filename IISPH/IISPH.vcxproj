@@ -123,6 +123,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="timer.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shader\Simplevt.glsl" />
     <None Include="shader\fg.glsl" />
     <None Include="shader\screen.fs" />
     <None Include="shader\screen.vt" />

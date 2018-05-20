@@ -1,18 +1,17 @@
 #version 330 core
 out vec4 FragColor;
-
+uniform float w;
 in vec2 TexCoords;
 const float threshhold = 1e-24;
 const float texOff=1.0/1024.0;
+const vec2 xShift=vec2(texOff,0.0);
+const vec2 yShift=vec2(0.0,texOff);
 uniform sampler2D screenTexture;
-#define M_PI 3.1415926535897932384626433832795
-vec3 XYCoord(vec2 Coord,float depth ){
-	
-	return  vec3((2.0* Coord-1.0)*depth*tan(M_PI/8.0),depth);
-}
+
+
 vec3 PointCoord(vec2 Coord){
 	float depth=texture2D(screenTexture,Coord).r;
-	return  vec3(10.0*(2.0* Coord-1.0)*tan(M_PI/8.0),depth);
+	return  vec3(depth*(2.0* Coord-1.0)*w,depth);
 }
 
 
@@ -25,17 +24,16 @@ void main()
 	}
 	vec2 normXY=texture2D(screenTexture,TexCoords).gb;
 	float leftdepth=texture2D(screenTexture,TexCoords+vec2(-texOff,0.0)).r;
-	vec3 viewPos=XYCoord(TexCoords,depth);
+	//vec3 viewPos=XYCoord(TexCoords,depth);
 	vec3 ddx,ddy;
-	float DnormxDx,DnormyDy;
-	float rightdepth=1.0* texture2D(screenTexture,TexCoords+vec2(+texOff,0.0)).r;
+	//float DnormxDx,DnormyDy;
+	float rightdepth= texture2D(screenTexture,TexCoords+vec2(+texOff,0.0)).r;
 	if(abs(leftdepth-depth)>abs(rightdepth-depth)||true){
 		ddx=-PointCoord(TexCoords-vec2(texOff/2.0,0.0))+PointCoord(TexCoords+vec2(texOff/2.0,0.0));
 		//DnormxDx=texture2D(screenTexture,TexCoords+vec2(texOff,0.0)).g-normXY.x;
 		//DnormxDx/=depth;
 	}else{
-		ddx=-XYCoord(TexCoords+vec2(-texOff,0.0),leftdepth)+viewPos;
-		//DnormxDx=-texture2D(screenTexture,TexCoords+vec2(-texOff,0.0)).g+normXY.x;
+		//ddx=-XYCoord(TexCoords+vec2(-texOff,0.0),leftdepth)+viewPos;
 	}
 	//const float CX=2.0/tan(M_PI/8.0);
 	
@@ -43,20 +41,10 @@ void main()
 	float bottomdepth=texture2D(screenTexture,TexCoords+vec2(0.0,-texOff)).r;
 	if(abs(bottomdepth-depth)>abs(topdepth-depth)||true){
 		ddy=-PointCoord(TexCoords-vec2(0.0,texOff/2))+PointCoord(TexCoords+vec2(0.0,texOff/2.0));
-		//DnormyDy=texture2D(screenTexture,TexCoords+vec2(0.0,texOff/2)).b-texture2D(screenTexture,TexCoords+vec2(0.0,-texOff/2.0)).b;
-		//DnormyDy*=depth;
 	}else{
-		ddy=viewPos- XYCoord(TexCoords+vec2(0.0,-texOff),bottomdepth);
-		//DnormyDy=(-texture2D(screenTexture,TexCoords+vec2(0.0,-texOff)).b+normXY.y)*depth;
+		//ddy=viewPos- XYCoord(TexCoords+vec2(0.0,-texOff),bottomdepth);
 	}
 	vec3 norm=cross(ddx,ddy);
 	norm=normalize(norm);
-	//depth-=0.1*(DnormyDy+DnormxDx);
-	//if(leftdepth>threshhold){
-	//mixed=50.0*abs(leftdepth-depth);
-	//}else{
-		//mixed=50.0*abs(depth-texture(screenTexture,TexCoords+vec2(texOff,0.0)).r);
-	//}
-   // vec3 col = 0.5*texture(screenTexture, TexCoords).rgb;
-    FragColor = vec4(depth,norm.x,norm.y,0.0);
+    FragColor = vec4(depth,norm.x,norm.y,norm.x);
 } 

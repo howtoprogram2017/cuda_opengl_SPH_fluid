@@ -63,5 +63,8 @@
     <None Include="shader\updateNorm.fs">
       <Filter>shaderResource</Filter>
     </None>
+    <None Include="shader\Simplevt.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
   </ItemGroup>
 </Project>

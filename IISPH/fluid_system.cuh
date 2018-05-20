@@ -30,7 +30,7 @@ if (error != cudaSuccess) { \
 #define FLOAT3_MUL_SCALAR(f,v) make_float3(f.x*v,f.y*v,f.z*v)
 #define MAX(a,b) a>b?a:b
 typedef unsigned int uint;
-const float radius = 0.05;
+const float radius = 0.025;
 const float smoothRadius = radius * 4;
 const float densityRatio = 1;   //control neighborNum
 const float GridSize = smoothRadius / densityRatio ;
@@ -77,8 +77,6 @@ struct bufflist
 	uint*			particle_grid_cell_index_update;
 	uint*			grid_particle_offset;
 	float3*         correction_pressure_force;
-	//uint*			clr;
-	//char*			sort_buf;
 	uint*			sort_index;
 	uint*			particle_index_grid; //
 

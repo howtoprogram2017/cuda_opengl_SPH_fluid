@@ -16,11 +16,12 @@ using namespace std;
 
 bufflist fbuf;
 uint Location[2];
+uint ParticleVAO[2];
 //#ifndef __CUDACC__
 //#define __CUDACC__
 
 #define UNDEF_GRID -1
-#define ITERATION_MAX_NUM 50
+#define ITERATION_MAX_NUM 20000000
 extern "C" cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 extern struct cudaGraphicsResource *cuda_vbo_resource[2];
  __constant__ ParticleParams _param;
@@ -35,25 +36,6 @@ dim3 gridsize_grid(outerGridDim.z);
 
 //#define TEST
 
-__global__ void addKernel(int *c, const int *a, const int *b)
-{
-    int i = threadIdx.x;
-    c[i] = a[i] + b[i];
-}
-
-__global__ void advectParticles_k(float3 *p, float3* q) {
-	//int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
-
-	//float po = p[tid].x+_param._GridnumRange.x/1000;
-	//if (po > 0.5f)
-	//	po = -0.5f;
-	//else if (po < -0.5f)
-	//	po = 0.5f;
-	//q[tid].x = po;
-	/*float* tmp = p;
-	p = testdata;
-	testdata = tmp;*/
-}
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 {
 	Timer timer;
@@ -111,7 +93,6 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	// Launch a kernel on the GPU with one thread for each element
 	
 	timer.start();
-		addKernel << <1, size >> >(dev_c, dev_a, dev_b);
 	cudaStatus = cudaDeviceSynchronize();
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
@@ -156,6 +137,48 @@ __device__ int getGrid(float3& pos) {
 	else
 		return UNDEF_GRID;
 
+}
+__device__ inline void boxBoundaryForce(const float3& position, float3& force)
+{
+	const float  sim_scale = 1;
+	const float3 vec_bound_min = _param._minGridCorner;
+	const float3 vec_bound_max = _param._maxGridCorner ;
+	float  param_force_distance = 0.015;
+	float param_max_boundary_force = 2.0;
+	float param_inv_force_distance = 1.0/param_force_distance;
+	if (position.x < vec_bound_min.x + param_force_distance)
+	{
+	float3 boundForce= (FLOAT3_MUL_SCALAR( make_float3(1.0, 0.0, 0.0) , ((vec_bound_min.x + param_force_distance - position.x) * param_inv_force_distance * 2.0 * param_max_boundary_force)));
+	force = FLOAT3_ADD(force,boundForce);
+	}
+	if (position.x > vec_bound_max.x - param_force_distance)
+	{
+		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(-1.0, 0.0, 0.0) ,((position.x + param_force_distance - vec_bound_max.x) * param_inv_force_distance * 2.0 * param_max_boundary_force));
+		force = FLOAT3_ADD(force, boundForce);
+	}
+
+	if (position.y < vec_bound_min.y + param_force_distance)
+	{
+		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 1.0, 0.0) , ((vec_bound_min.y + param_force_distance - position.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
+		force = FLOAT3_ADD(force, boundForce);
+	}
+	if (position.y > vec_bound_max.y - param_force_distance)
+	{
+		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, -1.0, 0.0) , ((position.y + param_force_distance - vec_bound_max.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
+		force = FLOAT3_ADD(force, boundForce);
+	}
+
+	if (position.z < vec_bound_min.z + param_force_distance)
+	{
+		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, 1.0) , ((vec_bound_min.z + param_force_distance - position.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
+		force = FLOAT3_ADD(force, boundForce);
+	}
+
+	if (position.z > vec_bound_max.z - param_force_distance)
+	{
+		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, -1.0) , ((position.z + param_force_distance - vec_bound_max.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
+		force = FLOAT3_ADD(force, boundForce);
+	}
 }
 int getGridCpu(float3& pos) {
 	int gridx = (pos.x - minOuterBound.x) / GridSize;
@@ -214,11 +237,13 @@ void ComputeDensityErrorFactor(vector<float3>& pos, int i) {
 	cpuParam.param_density_error_factor = -1.0 / (factor*gradWTerm);
 }
 
+//
 
 void Setup() {
 	//CUDA_SAFE_CALL(cudaMalloc((void**)&testdata, 9*sizeof(float)));
 	//memset(testdata, 0, 9 * sizeof(float));
 	glGenBuffers(2, &Location[0]);
+	glGenVertexArrays(2, &ParticleVAO[0]);
 	vector<float3> initialPos = vector<float3>();
 	vector<float3> ghostPos = vector<float3>();
 	int total = particleNum;
@@ -276,11 +301,12 @@ void Setup() {
 		}
 	}	
 	for (int i = 0; i < 2; i++) {
+		glBindVertexArray(ParticleVAO[i]);
 		glBindBuffer(GL_ARRAY_BUFFER, Location[i]);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float3)*initialPos.size(), &initialPos[0], GL_STATIC_DRAW);
 		//glVertexAttribPointer(1,)
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+		glEnableVertexAttribArray(0);
 		cudaGraphicsGLRegisterBuffer(&cuda_vbo_resource[i], Location[i], cudaGraphicsRegisterFlagsNone);
 	}
 	
@@ -288,12 +314,12 @@ void Setup() {
 	//cudaMemcpyToSymbol(&_param, &cpuParam, sizeof(cpuParam), 0);
 	//__constant__ ParticleParams* _param1;
 	uint index = 0;
-	float gravity=1;
+	float gravity=9;
 	//float mass = 1.0;
 	float poly6kernel = 315.0f / (64.0f*M_PI*pow(smoothRadius, 3));
 	float poly6kernelGrad = 945.0f / (32.0f*M_PI*pow(smoothRadius, 4));
 	float boudary_force_factor = 25;
-	float time_step = 0.003;
+	float time_step = 0.0015;
 	
 	//{ minGridCorner ,maxGridCorner,GridIndexRange,GridSize,particleNum,gravity,mass,time_step,smoothRadius,restDensity,poly6kernel,poly6kernelGrad,density_error_factor,boudary_force_factor} ;
 	cpuParam._minGridCorner = minGridCorner;
@@ -405,11 +431,12 @@ void computeCUDAGridBlockSize(int numParticles, int blockSize, int &numBlocks, i
 	numBlocks = iDivUp(numParticles, numThreads);
 }
 uint getLocation() {
-	return Location[0];
+	return ParticleVAO[0];
 }
 void swapBuff() {
 	swap(cuda_vbo_resource[0], cuda_vbo_resource[1]);
 	swap(Location[0], Location[1]);
+	swap(ParticleVAO[0], ParticleVAO[1]);
 	swap(fbuf.vel_old, fbuf.vel_update);
 	//swap(fbuf.particle_grid_cell_index, fbuf.particle_grid_cell_index_update);
 }
@@ -451,6 +478,7 @@ __global__ void sortIndex(bufflist fbuf) {
 __global__ void computeOtherForce(bufflist fbuf) {
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
 	fbuf.force[tid] = { 0,-_param.gravity,0 };
+	boxBoundaryForce(fbuf.pos_update[tid], fbuf.force[tid]);
 }
 __device__ void collisionHandling(float3* pos,float3* vel) {
 	const float3 vec_bound_min = _param._minGridCorner;
@@ -544,8 +572,7 @@ __global__ void PredictPosition(bufflist fbuf,float3 * output_pos) {
 	float3 predictedVelocity = FLOAT3_ADD(fbuf.vel_update[tid] , FLOAT3_MUL_SCALAR(acceleration, _param.time_step));
 
 	float3 pos = FLOAT3_ADD(fbuf.pos_update[tid] , FLOAT3_MUL_SCALAR(predictedVelocity, _param.time_step));
-	//float3 pos = fbuf.pos_update[tid];
-	//float3* veval = &fbuf.vel_update[tid];
+
 	collisionHandling(&pos, NULL);
 
 	output_pos[tid] = pos;
@@ -693,7 +720,7 @@ __global__ void ComputePressureForce(bufflist fbuf) {
 					float kernelGradientValue = poly6kernelGradient(jdist);
 					float3 kernelGradient = FLOAT3_MUL_SCALAR( vector_i_minus_j , kernelGradientValue/jdist);
 					float grad = 0.5f * (ipress + fbuf.correction_pressure[j]) * rest_volume * rest_volume;
-					force =FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad)) ;
+					force =FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad));
 					//force.y++;
 				}
 			}
@@ -768,7 +795,7 @@ __global__ void advanceParticles(bufflist fbuf,float3* output) {
 	collisionHandling(&pos, &veval);
 
 	output[tid] = pos;
-	fbuf.vel_update[tid] = veval;
+	fbuf.vel_update[tid] = (veval);
 }
 #include <thrust/device_ptr.h>
 #include <thrust/device_vector.h>
@@ -783,7 +810,7 @@ float ReduceMax(float* input, float* output, int num) {
 	cudaDeviceSynchronize();
 	float max_density_error;
 	cudaMemcpy(&max_density_error, fbuf.max_predicted_density, sizeof(float), cudaMemcpyDeviceToHost);
-	SAFE_KERNEL
+	////Safe
 		//float res = *max_density_error;
 	//delete max_density_error;
 		return max_density_error;
@@ -807,7 +834,7 @@ void IndexSort(float3* pos_old) {
 	
 	cudaDeviceSynchronize();
 	sortIndex<<<gridsize_p, blocksize_p >>>(fbuf);
-	SAFE_KERNEL
+	//Safe
 	cudaDeviceSynchronize();
 #ifdef TEST
 	cudaMemcpy(&input2[0], fbuf.sort_index, particleNum * sizeof(int), cudaMemcpyDeviceToHost);
@@ -837,7 +864,7 @@ void IndexSort(float3* pos_old) {
 void ComputeOtherForce() {    //grivty
 //	dim3 blockSize();
 	computeOtherForce<<<gridsize_p,blocksize_p>>>(fbuf);
-	SAFE_KERNEL
+	//Safe
 	//auto input1 = vector<float3>(particleNum);
 
 	//cudaMemcpy(&input1[0], fbuf.force, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
@@ -877,7 +904,7 @@ void PredictonCorrection(float3* output) {
 		
 
 		ComputePredictedDensityAndPressure<<<gridsize_p,blocksize_p>>>(fbuf,output);
-		SAFE_KERNEL
+		//Safe
 		//cudaMemcpy(&input1[0], fbuf.test_buff, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
 		//cout << "density:" << endl;
 		//for (auto a : input1)
@@ -918,8 +945,8 @@ void PredictonCorrection(float3* output) {
 }
 void Advance(float3* output) {
 	advanceParticles << <gridsize_p, blocksize_p >> > (fbuf,output);
-	auto input2 = vector<float3>(particleNum);
-	cudaMemcpy(&input2[0], output, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
+	//auto input2 = vector<float3>(particleNum);
+	//cudaMemcpy(&input2[0], output, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
 	/*for (auto pos : input2) 
 		cout << pos.y << " ";
 	cout << endl; 
@@ -927,7 +954,7 @@ void Advance(float3* output) {
 	for (auto ve : input2)
 		cout << ve.y << " ";
 	cout << endl;*/
-	SAFE_KERNEL
+	////Safe
 }
 void stepTime() {
 	float3 * input,* output;

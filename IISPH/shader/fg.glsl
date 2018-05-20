@@ -3,7 +3,7 @@
 out vec4 Color;
 //in  float Size; //in world
 in float ScreenDepth;
-const float WordSize = 1.0;
+uniform float WordSize;
 uniform vec3 eyePos;
 //layout(depth_any) out float gl_FragDepth;
  void main()
