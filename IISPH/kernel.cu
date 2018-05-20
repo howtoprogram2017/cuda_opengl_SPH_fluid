@@ -148,36 +148,42 @@ __device__ inline void boxBoundaryForce(const float3& position, float3& force)
 	float param_inv_force_distance = 1.0/param_force_distance;
 	if (position.x < vec_bound_min.x + param_force_distance)
 	{
-	float3 boundForce= (FLOAT3_MUL_SCALAR( make_float3(1.0, 0.0, 0.0) , ((vec_bound_min.x + param_force_distance - position.x) * param_inv_force_distance * 2.0 * param_max_boundary_force)));
-	force = FLOAT3_ADD(force,boundForce);
+		float3 boundForce = make_float3(1.0, 0.0, 0.0)*((position.z + param_force_distance - vec_bound_max.z)
+			* param_inv_force_distance * 2.0 * param_max_boundary_force);
+		force += boundForce;
 	}
 	if (position.x > vec_bound_max.x - param_force_distance)
 	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(-1.0, 0.0, 0.0) ,((position.x + param_force_distance - vec_bound_max.x) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
+		float3 boundForce = make_float3(-1.0, 0.0, 0.0)*((position.z + param_force_distance - vec_bound_max.z)
+			* param_inv_force_distance * 2.0 * param_max_boundary_force);
+		force += boundForce;
 	}
 
 	if (position.y < vec_bound_min.y + param_force_distance)
 	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 1.0, 0.0) , ((vec_bound_min.y + param_force_distance - position.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
+		float3 boundForce = make_float3(0.0, 1.0, 0.0)*((position.z + param_force_distance - vec_bound_max.z)
+			* param_inv_force_distance * 2.0 * param_max_boundary_force);
+		force += boundForce;
 	}
 	if (position.y > vec_bound_max.y - param_force_distance)
 	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, -1.0, 0.0) , ((position.y + param_force_distance - vec_bound_max.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
+		float3 boundForce = make_float3(0.0, -1.0, 0.0)*((position.z + param_force_distance - vec_bound_max.z)
+			* param_inv_force_distance * 2.0 * param_max_boundary_force);
+		force += boundForce;
 	}
 
 	if (position.z < vec_bound_min.z + param_force_distance)
 	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, 1.0) , ((vec_bound_min.z + param_force_distance - position.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
+		float3 boundForce = make_float3(0.0, 0.0, 1.0)*((position.z + param_force_distance - vec_bound_max.z)
+			* param_inv_force_distance * 2.0 * param_max_boundary_force); 
+		force += boundForce;
 	}
 
 	if (position.z > vec_bound_max.z - param_force_distance)
 	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, -1.0) , ((position.z + param_force_distance - vec_bound_max.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
+		float3 boundForce = make_float3(0.0,0.0,-1.0)*((position.z + param_force_distance - vec_bound_max.z) 
+			* param_inv_force_distance * 2.0 * param_max_boundary_force); 
+		force += boundForce;
 	}
 }
 int getGridCpu(float3& pos) {
@@ -224,16 +230,16 @@ void ComputeDensityErrorFactor(vector<float3>& pos, int i) {
 	for (int j = 0; j < pos.size(); j++) {
 		if (i == j)
 			continue;
-		float3 pos_i_minus_j = FLOAT3_SUB(pos[i],pos[j]);
-		float dist_square = FLOAT3_DOT(pos_i_minus_j,pos_i_minus_j);
+		float3 pos_i_minus_j = (pos[i]-pos[j]);
+		float dist_square = dot(pos_i_minus_j,pos_i_minus_j);
 		float dist = sqrtf(dist_square);
-		float3 gradVec = FLOAT3_MUL_SCALAR(pos_i_minus_j, poly6kernelGradientCpu(dist)/dist);
-		GradWDot += FLOAT3_DOT(gradVec, gradVec);
-		GradW = FLOAT3_ADD(GradW, gradVec);
+		float3 gradVec = (pos_i_minus_j* poly6kernelGradientCpu(dist)/dist);
+		GradWDot += dot(gradVec, gradVec);
+		GradW = (GradW+ gradVec);
 	}
 	
 	float factor = cpuParam.mass * cpuParam.mass * cpuParam.time_step * cpuParam.time_step/(cpuParam.rest_density*cpuParam.rest_density);
-	float gradWTerm = -FLOAT3_DOT(GradW,GradW) - GradWDot;
+	float gradWTerm = -dot(GradW,GradW) - GradWDot;
 	cpuParam.param_density_error_factor = -1.0 / (factor*gradWTerm);
 }
 
@@ -259,7 +265,7 @@ void Setup() {
 			for (int k = 0; k < numZ; k++) {
 				int index = k + numZ * j + i * numZ*numY;
 				float3 move = {i*initialDistance,j*initialDistance,k*initialDistance};
-				float3 pos = FLOAT3_ADD(startPos,move);
+				float3 pos = (startPos+move);
 				
 				initialPos.push_back(pos);
 			}
@@ -491,7 +497,7 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->x = vec_bound_min.x;
 			if (vel) {
 				float3 axis = make_float3(-1, 0, 0);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->x *= damping;
 			}
 		}
@@ -500,7 +506,7 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->x = vec_bound_max.x;
 			if (vel) {
 				float3 axis = make_float3(1, 0, 0);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->x *= damping;
 			}
 
@@ -510,7 +516,7 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->y = vec_bound_min.y;
 			if (vel) {
 				float3 axis = make_float3(0, -1, 0);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->y *= damping;
 			}
 		
@@ -520,7 +526,7 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->y = vec_bound_max.y;
 			if (vel) {
 				float3 axis = make_float3(0, 1, 0);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->y *= damping;
 			}
 			
@@ -530,7 +536,7 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->z = vec_bound_min.z;
 			if (vel) {
 				float3 axis = make_float3(0, 0, -1);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->z *= damping;
 			}
 
@@ -540,12 +546,12 @@ __device__ void collisionHandling(float3* pos,float3* vel) {
 			pos->z = vec_bound_max.z;
 			if (vel) {
 				float3 axis = make_float3(0, 0, 1);
-				*vel = FLOAT3_SUB((*vel), FLOAT3_MUL_SCALAR(axis, FLOAT3_DOT(axis, (*vel))*reflect));
+				*vel -= axis * (dot(axis, *vel)*reflect);
 				vel->z *= damping;
 			}
 		}
-		if(vel)
-		*vel = FLOAT3_MUL_SCALAR((*vel),0.99 );
+		if (vel)
+			*vel += 0.99;
 	
 }
 __device__ float poly6kernel(float dist) {
@@ -568,10 +574,10 @@ __global__ void PredictPosition(bufflist fbuf,float3 * output_pos) {
 		return;
 	//const float	   sim_scale = simData.param_sim_scale;
 	;
-	float3 acceleration = FLOAT3_MUL_SCALAR(FLOAT3_ADD(fbuf.force[tid], fbuf.correction_pressure_force[tid]), (1.0f / _param.mass));
-	float3 predictedVelocity = FLOAT3_ADD(fbuf.vel_update[tid] , FLOAT3_MUL_SCALAR(acceleration, _param.time_step));
+	float3 acceleration = (fbuf.force[tid]+ fbuf.correction_pressure_force[tid])* (1.0f / _param.mass);
+	float3 predictedVelocity = (fbuf.vel_update[tid] + (acceleration* _param.time_step));
 
-	float3 pos = FLOAT3_ADD(fbuf.pos_update[tid] , FLOAT3_MUL_SCALAR(predictedVelocity, _param.time_step));
+	float3 pos = (fbuf.pos_update[tid] + (predictedVelocity* _param.time_step));
 
 	collisionHandling(&pos, NULL);
 
@@ -616,7 +622,7 @@ __global__ void ComputePredictedDensityAndPressure(bufflist fbuf,float3* predict
 				{
 					continue;
 				}
-				float3 vector_i_minus_j = FLOAT3_SUB(ipredicted_pos, predicted_pos[j]);
+				float3 vector_i_minus_j = (ipredicted_pos- predicted_pos[j]);
 				const float dx = vector_i_minus_j.x;
 				const float dy = vector_i_minus_j.y;
 				const float dz = vector_i_minus_j.z;
@@ -639,7 +645,7 @@ __global__ void ComputePredictedDensityAndPressure(bufflist fbuf,float3* predict
 			for (int cndx = cell_start; cndx < cell_end; cndx++)
 			{
 				int j = cndx;
-				float3 vector_i_minus_j = FLOAT3_SUB(ipredicted_pos, fbuf.ghost_pos[j]);
+				float3 vector_i_minus_j = (ipredicted_pos- fbuf.ghost_pos[j]);
 				const float dx = vector_i_minus_j.x;
 				const float dy = vector_i_minus_j.y;
 				const float dz = vector_i_minus_j.z;
@@ -711,16 +717,17 @@ __global__ void ComputePressureForce(bufflist fbuf) {
 				{
 					continue;
 				}
-				float3 vector_i_minus_j = FLOAT3_SUB(ipos , fbuf.pos_update[j]);
+				float3 vector_i_minus_j = (ipos - fbuf.pos_update[j]);
 
-				const float dist_square = FLOAT3_DOT(vector_i_minus_j, vector_i_minus_j); 
+				const float dist_square = dot(vector_i_minus_j, vector_i_minus_j); 
 				if (dist_square < smooth_radius_square && dist_square > 0)
 				{
 					float jdist = sqrt(dist_square);
 					float kernelGradientValue = poly6kernelGradient(jdist);
-					float3 kernelGradient = FLOAT3_MUL_SCALAR( vector_i_minus_j , kernelGradientValue/jdist);
+					float3 kernelGradient = ( vector_i_minus_j * kernelGradientValue/jdist);
 					float grad = 0.5f * (ipress + fbuf.correction_pressure[j]) * rest_volume * rest_volume;
-					force =FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad));
+					//force =FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad));
+					force -= kernelGradient * grad;
 					//force.y++;
 				}
 			}
@@ -730,7 +737,7 @@ __global__ void ComputePressureForce(bufflist fbuf) {
 			{
 				//force.y++;
 				int j = cndx;
-				float3 vector_i_minus_j = FLOAT3_SUB(ipos, fbuf.ghost_pos[j]);
+				float3 vector_i_minus_j = (ipos- fbuf.ghost_pos[j]);
 				const float dx = vector_i_minus_j.x;
 				const float dy = vector_i_minus_j.y;
 				const float dz = vector_i_minus_j.z;
@@ -740,9 +747,10 @@ __global__ void ComputePressureForce(bufflist fbuf) {
 				{
 					float jdist = sqrt(dist_square);
 					float kernelGradientValue = poly6kernelGradient(jdist);
-					float3 kernelGradient = FLOAT3_MUL_SCALAR(vector_i_minus_j, kernelGradientValue/jdist);
+					float3 kernelGradient = (vector_i_minus_j* kernelGradientValue/jdist);
 					float grad = 0.5f * (ipress) * rest_volume * rest_volume;
-					force = FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad));
+					//force = (force- FLOAT3_MUL_SCALAR(kernelGradient, grad));
+					force -= kernelGradient * grad;
 					
 				}
 			}
@@ -784,13 +792,12 @@ __global__ void advanceParticles(bufflist fbuf,float3* output) {
 	if (tid >= _param.particleNum)
 		return;
 
-	float3 acceleration = FLOAT3_MUL_SCALAR( FLOAT3_ADD(fbuf.force[tid] , fbuf.correction_pressure_force[tid]), 1.0/ _param.mass);
+	float3 acceleration =  (fbuf.force[tid] + fbuf.correction_pressure_force[tid])* 1.0/ _param.mass;
 
 	float3 veval = fbuf.vel_update[tid];
-	veval =FLOAT3_ADD(veval,  FLOAT3_MUL_SCALAR( acceleration , _param.time_step));
-
+	veval += acceleration * _param.time_step;
 	float3 pos = fbuf.pos_update[tid];
-	pos = FLOAT3_ADD(pos, FLOAT3_MUL_SCALAR(veval,_param.time_step));
+	pos = (pos+ (veval*_param.time_step));
 
 	collisionHandling(&pos, &veval);
 

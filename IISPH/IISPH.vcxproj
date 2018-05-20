@@ -117,6 +117,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   <ItemGroup>
     <ClInclude Include="fluid_system.cuh" />
     <ClInclude Include="GLSLShader.h" />
+    <ClInclude Include="math_define.cuh" />
     <ClInclude Include="PCISPH.h" />
     <ClInclude Include="sphere.h" />
     <ClInclude Include="stb_image.h" />

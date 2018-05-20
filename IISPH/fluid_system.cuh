@@ -8,6 +8,7 @@
 //#include <cmath>
 #include <math.h>
 #include <cuda_gl_interop.h>
+#include "math_define.cuh"
 using namespace std;
 
 #  define CUDA_SAFE_CALL( call) {                                    \
@@ -23,24 +24,25 @@ using namespace std;
 if (error != cudaSuccess) { \
 	fprintf(stderr, "CUDA ERROR: : %s\n", cudaGetErrorString(error)); \
 }
-#define FLOAT3_ADD(a,b) make_float3(a.x+b.x,a.y+b.y,a.z+b.z)
-#define FLOAT3_SUB(a,b) make_float3(a.x-b.x,a.y-b.y,a.z-b.z)
-#define FlOAT3_NEG(a)  make_float3(-a.x,-b.y,-c.z)   
-#define FLOAT3_DOT(a,b)  (a.x*b.x+a.y*b.y+a.z*b.z)
-#define FLOAT3_MUL_SCALAR(f,v) make_float3(f.x*v,f.y*v,f.z*v)
+//#define FLOAT3_ADD(a,b) make_float3(a.x+b.x,a.y+b.y,a.z+b.z)
+//#define FLOAT3_SUB(a,b) make_float3(a.x-b.x,a.y-b.y,a.z-b.z)
+//#define FlOAT3_NEG(a)  make_float3(-a.x,-b.y,-c.z)   
+//#define FLOAT3_DOT(a,b)  (a.x*b.x+a.y*b.y+a.z*b.z)
+//#define FLOAT3_MUL_SCALAR(f,v) make_float3(f.x*v,f.y*v,f.z*v)
 #define MAX(a,b) a>b?a:b
-typedef unsigned int uint;
+
+
 const float radius = 0.025;
 const float smoothRadius = radius * 4;
 const float densityRatio = 1;   //control neighborNum
 const float GridSize = smoothRadius / densityRatio ;
 const float3 minGridCorner = {-0.5,-0.5,-0.5};
 const float3 maxGridCorner = { 0.5,0.5,0.5 };
-const float3 OuterGridRange= FLOAT3_ADD( FLOAT3_SUB(maxGridCorner,minGridCorner),make_float3(smoothRadius*2, smoothRadius*2, smoothRadius*2));
+const float3 OuterGridRange = maxGridCorner - minGridCorner + (2 * smoothRadius)*make_float3(1, 1, 1); //FLOAT3_ADD( FLOAT3_SUB(maxGridCorner,minGridCorner),make_float3(smoothRadius*2, smoothRadius*2, smoothRadius*2));
 const float3 minOuterBound = { minGridCorner.x - smoothRadius,minGridCorner.y - smoothRadius,minGridCorner.z - smoothRadius };
 const float3 minWaterCorner = { -0,-0.5,-0.5 };
 const float3 maxWaterCorner = {0.5,0.5,0.5};
-const float3 waterRange = FLOAT3_SUB(maxWaterCorner,minWaterCorner);
+const float3 waterRange = maxWaterCorner - minWaterCorner;// FLOAT3_SUB(maxWaterCorner, minWaterCorner);
 const float restDensity = 1000;
 const uint influcedParticleNum = 50;
 const float mass = 4*M_PI/(3*influcedParticleNum)*pow(smoothRadius,3.0f)*restDensity;

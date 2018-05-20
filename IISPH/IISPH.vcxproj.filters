@@ -21,6 +21,9 @@
     <ClInclude Include="fluid_system.cuh">
       <Filter>particleSystem</Filter>
     </ClInclude>
+    <ClInclude Include="math_define.cuh">
+      <Filter>particleSystem</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="rendertool">
