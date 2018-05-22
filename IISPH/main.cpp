@@ -274,20 +274,20 @@ int main()
 {
 
 	cin >> ProgramName;
-	//const int arraySize = 500;
-	// int a[arraySize] ;
-	//memset(a, sizeof(a), 0);
-	// int b[arraySize];
-	//memset(b, sizeof(b), 0);
-	//int c[arraySize];
-	////auto t=clock();
-	//// Add vectors in parallel.
-	////time_point<Clock> start = Clock::now();
-	//////sleep_for(500ms);
-	//	cudaError_t cudaStatus;
-	//	int k = 100;
-	//	testDuration(addWithCuda(c, a, b, arraySize);)
-	//		testf();
+	/*const int arraySize = 500;
+	 int a[arraySize] ;
+	memset(a, sizeof(a), 0);
+	 int b[arraySize];
+	memset(b, sizeof(b), 0);
+	int c[arraySize];*/
+	//auto t=clock();
+	// Add vectors in parallel.
+	//time_point<Clock> start = Clock::now();
+	////sleep_for(500ms);
+	/*	cudaError_t cudaStatus;
+		int k = 100;
+		testDuration(addWithCuda(c, a, b, arraySize);)
+			testf();*/
 	if (!glfwInit())
 	{
 		fprintf(stderr, "Failed to initialize GLFW\n");
@@ -350,7 +350,7 @@ int main()
 	glBufferData(GL_ARRAY_BUFFER, sizeof(testVertices), testVertices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,0, (void*)0);
 	glEnableVertexAttribArray(0);
-	sphere testsphere(8,radius);
+	sphere testsphere(8, particle.getRadius());
 	testsphere.generateBuffer();
 	particle.particleStepUp();
 	UserInputSetup();
@@ -455,7 +455,7 @@ int main()
 			glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
 			glUniformMatrix4fv(render("ViewMatrix"), 1, GL_FALSE, value_ptr(viewMatrix));
 			glUniform1f(render("w"),w);
-			glUniform1f(render("WordSize"), smoothRadius/2.30);
+			glUniform1f(render("WordSize"), particle.getSmoothRadius()/2.30);
 			glUniform3fv(render("eyePos"),1,value_ptr(eyepos));
 			//glEnable(GL_DEPTH_TEST);
 		//	glBindVertexArray(VAO);
@@ -469,7 +469,7 @@ int main()
 			glDisable(GL_PROGRAM_POINT_SIZE);	
 			glDisable(GL_POINT_SPRITE);
 			glDisable(GL_DEPTH_TEST);
-			int i = 40-1;
+			int i = 20-1;
 			while (i-->0)
 			{
 			

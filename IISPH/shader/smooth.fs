@@ -70,7 +70,7 @@ void main()
  //if(abs(H)<1.5)
 	if(H>0)
 	{
-	depth-=.5*H;
+	depth-=.0*H;
 	}
 	
 	 

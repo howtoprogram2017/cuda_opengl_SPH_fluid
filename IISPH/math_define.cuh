@@ -1019,3 +1019,39 @@ inline __host__ __device__ float3 fmin(float3 a, float3 b)
 {
 	return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
 }
+////////////////////////////////////////////////////////////////////////////////
+// length
+////////////////////////////////////////////////////////////////////////////////
+
+inline __host__ __device__ float length(float2 v)
+{
+	return sqrtf(dot(v, v));
+}
+inline __host__ __device__ float length(float3 v)
+{
+	return sqrtf(dot(v, v));
+}
+inline __host__ __device__ float length(float4 v)
+{
+	return sqrtf(dot(v, v));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// normalize
+////////////////////////////////////////////////////////////////////////////////
+
+inline __host__ __device__ float2 normalize(float2 v)
+{
+	float invLen = sqrtf(dot(v, v));
+	return v * invLen;
+}
+inline __host__ __device__ float3 normalize(float3 v)
+{
+	float invLen = sqrtf(dot(v, v));
+	return v * invLen;
+}
+inline __host__ __device__ float4 normalize(float4 v)
+{
+	float invLen = sqrtf(dot(v, v));
+	return v * invLen;
+}
