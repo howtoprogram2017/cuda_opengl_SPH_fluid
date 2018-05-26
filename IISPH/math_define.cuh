@@ -1043,15 +1043,71 @@ inline __host__ __device__ float length(float4 v)
 inline __host__ __device__ float2 normalize(float2 v)
 {
 	float invLen = sqrtf(dot(v, v));
-	return v * invLen;
+	return v * (1.0 / invLen);
 }
 inline __host__ __device__ float3 normalize(float3 v)
 {
 	float invLen = sqrtf(dot(v, v));
-	return v * invLen;
+	return v * (1.0 / invLen);
 }
 inline __host__ __device__ float4 normalize(float4 v)
 {
 	float invLen = sqrtf(dot(v, v));
-	return v * invLen;
+	return v * (1.0/invLen);
+}
+
+inline __host__ __device__ float3 cross(float3 a, float3 b)
+{
+	return make_float3(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);
+}
+//double operation
+inline __host__ __device__ double3 operator+(double3 &a, double3 &b)
+{
+	
+	return make_double3(a.x+b.x,a.y+b.y,a.z+b.z);
+}
+inline __host__ __device__ double3 operator*(const double3 &a, const double b)
+{
+	return make_double3(a.x * b, a.y *b, a.z *b);
+}
+inline __host__ __device__ double3 operator*(double &a, double3 b)
+{
+	return b*a;
+}
+inline __host__ __device__ double3 operator-(const double3 &a, const double3 &b)
+{
+
+	return make_double3(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+inline __host__ __device__ double3 cross(double3 a, double3 b)
+{
+	return make_double3(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);
+}
+inline __host__ __device__ double dot(double3 a, double3 b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+inline __host__ __device__ double3 normalize(double3 v)
+{
+	double invLen = sqrt(dot(v, v));
+	return v * (1.0 / invLen);
+}
+inline __host__ __device__ double length(double3 v)
+{
+	return sqrt(dot(v, v));
+}
+//equate
+inline __host__ __device__ bool operator==(const uint3& a,const uint3& b)
+{
+	return a.x == b.x&&a.y == b.y&&a.z == b.z;
+}
+inline __host__ __device__ bool operator!=(const uint3& a, const uint3& b)
+{
+	return !(a == b);
+}
+inline __host__ __device__ void operator+=(double3 &a, double3 b)
+{
+	a.x += b.x;
+	a.y += b.y;
+	a.z += b.z;
 }

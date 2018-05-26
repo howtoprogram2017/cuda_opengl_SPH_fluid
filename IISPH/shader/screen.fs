@@ -44,7 +44,7 @@ float depth=texture(screenTexture,TexCoords).r;
    FragColor = vec4((specular+diffuse), 1.0);
 }
 else if(State == 1){
-FragColor=texture2D(screenTexture,TexCoords);
+FragColor=texture2D(screenTexture,vec2(0.0,0.0));
 }
 	
 } 

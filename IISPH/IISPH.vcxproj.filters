@@ -24,6 +24,12 @@
     <ClInclude Include="math_define.cuh">
       <Filter>particleSystem</Filter>
     </ClInclude>
+    <ClInclude Include="BoundaryData.h">
+      <Filter>rendertool</Filter>
+    </ClInclude>
+    <ClInclude Include="TriangleMesh.h">
+      <Filter>rendertool</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="rendertool">

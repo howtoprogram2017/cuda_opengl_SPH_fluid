@@ -16,13 +16,14 @@
 #include <cuda_gl_interop.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-//#include <glm/tra>
 #include <glm/gtx/rotate_vector.hpp>
 #include <GL/glew.h>
 #include <vector>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "sphere.h"
+#include "BoundaryData.h"
+vector<double3> boundaryParticles;
 
 //#include <cmath>
 using namespace glm;
@@ -96,7 +97,6 @@ unsigned char* createBitmapInfoHeader(int height, int width) {
 		0,0,0,0, /// colors in color table
 		0,0,0,0, /// important color count
 	};
-
 	infoHeader[0] = (unsigned char)(infoHeaderSize);
 	infoHeader[4] = (unsigned char)(width);
 	infoHeader[5] = (unsigned char)(width >> 8);
@@ -272,8 +272,27 @@ void UserInputSetup() {
 }
 int main()
 {
+	ProgramName = " ss";
+	//cin >> ProgramName;
+	OBJLoader loader;
+	vector<float3> x;
+	vector<float3> normal;
+	vector<float2> tex;
+	double3 scale = { 1.1f,1.1f,1.1f };
+	vector< OBJLoader::MeshFaceIndices> mesh;
+	string meshFileName = "BoundaryData/UnitBox.obj";
+	//loader.loadObj("BoundaryData/UnitBox.obj", &x, &mesh, &normal,&tex, scale);
+	PoissonDiskSampling sampler;
+	TriangleMesh geo;
+	loadObj(meshFileName, geo, scale);
+	
+	//sampler.sampleMesh(x.size(), &x[0], );
+	sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.02, 10, 1, boundaryParticles);
+	vector<float3> boudaryf;//= { {0.5f,0.5f,0.5f},{ 0.5f,0.5f,-0.5f },{ 0.5f,-0.5f,0.5f },{ -0.5f,0.5f,0.5f }
+	//,{-0.5f,0.5f,-0.5f}, {-0.5f,-0.5f,0.5f}, {0.5f,-0.5f,-0.5f}, {-0.5f,-0.5f,-0.5f} };
+	/*for (auto & b : boundaryParticles)
+		boudaryf.push_back({ (float)b.x,(float)b.y,(float)b.z });*/
 
-	cin >> ProgramName;
 	/*const int arraySize = 500;
 	 int a[arraySize] ;
 	memset(a, sizeof(a), 0);
@@ -417,8 +436,11 @@ int main()
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 	//}
-
-	
+		/*unsigned boundary;
+		glGenBuffers(1, &boundary);
+		glBindBuffer(GL_ARRAY_BUFFER, boundary);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float3)*boudaryf.size(), &boudaryf[0], GL_STATIC_DRAW);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);*/
 
 	do {
 		handleinput(); 
@@ -433,6 +455,11 @@ int main()
 		eyepos = rotateY(eyepos, radians(-angleX));
 		viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
 		mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
+		/*screen.Use();
+		glPointSize(10.0f);
+		glUniform1i(screen("State"), 1);
+		glUniformMatrix4fv(screen("MVP"), 1, GL_FALSE, value_ptr(mvp));
+		glDrawArrays(GL_POINTS, 0, boudaryf.size());*/
 
 		{
 			
