@@ -192,7 +192,7 @@ void loadObj(const std::string &filename, TriangleMesh &mesh, const double3 &sca
 	float3 s = { (float)scale.x, (float)scale.y, (float)scale.z };
 	OBJLoader::loadObj(filename, &x, &faces, &normals, nullptr, s);
 
-	mesh.release();
+	//mesh.release();
 	const unsigned int nPoints = (unsigned int)x.size();
 	const unsigned int nFaces = (unsigned int)faces.size();
 	mesh.initMesh(nPoints, nFaces);
@@ -395,10 +395,10 @@ inline void PoissonDiskSampling::determineTriangleAreas(const unsigned int numVe
 	double totalArea = 0.0;
 	double tmpMaxArea = numeric_limits<double>::min();
 
-#pragma omp parallel default(shared)
+//#pragma omp parallel default(shared)
 	{
 		// Compute area of each triangle
-		#pragma omp for reduction(+:totalArea) schedule(static) 
+	//	#pragma omp for reduction(+:totalArea) schedule(static) 
 		for (int i = 0; i < (int)numFaces; i++)
 		{
 			 double3 a = vertices[faces[3 * i]];
@@ -415,7 +415,7 @@ inline void PoissonDiskSampling::determineTriangleAreas(const unsigned int numVe
 
 			if (area > tmpMaxArea)
 			{
-	#pragma omp critical
+	//#pragma omp critical
 				{
 					tmpMaxArea =std::max(area, tmpMaxArea);
 				}
@@ -425,6 +425,7 @@ inline void PoissonDiskSampling::determineTriangleAreas(const unsigned int numVe
 	}
 	m_maxArea = std::max(tmpMaxArea, m_maxArea);
 	m_totalArea = totalArea;
+	cout << "aera"<<m_totalArea << endl;
 }
 inline void PoissonDiskSampling::generateInitialPointSet(const unsigned int numVertices, const double3 * vertices, const unsigned int numFaces, const unsigned int * faces)
 {
@@ -472,8 +473,8 @@ inline void PoissonDiskSampling::parallelUniformSurfaceSampling(std::vector<doub
 	// Sort initial points into HashMap storing only the index of the first point of cell
 	// and build phase groups
 	unordered_map<CellPos, HashEntry, CellPosHasher> hMap(2 * m_initialInfoVec.size());
-	samples.clear();
-	samples.reserve(m_initialInfoVec.size());
+	//samples.clear();
+	//samples.reserve(m_initialInfoVec.size());
 
 	// Already insert first Initial point as start of first cell in hashmap
 	{

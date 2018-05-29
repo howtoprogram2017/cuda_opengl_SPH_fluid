@@ -133,9 +133,10 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   <ItemGroup>
     <None Include="shader\Simplevt.glsl" />
     <None Include="shader\fg.glsl" />
-    <None Include="shader\screen.fs" />
+    <None Include="shader\screenWater.fs" />
     <None Include="shader\screen.vt" />
     <None Include="shader\smooth.fs" />
+    <None Include="shader\textured.fs" />
     <None Include="shader\updateNorm.fs" />
     <None Include="shader\vt.glsl" />
     <None Include="shader\waterfg.glsl" />

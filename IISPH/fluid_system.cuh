@@ -106,6 +106,6 @@ public:
 	uint getGhostParticleNum() { return getghostNum(); }
 	float getRadius();
 	float getSmoothRadius();
-	void particleStepUp() { Setup();};
+	void particleSetUp() { Setup();};
 };
 

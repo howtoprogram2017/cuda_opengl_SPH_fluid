@@ -11,7 +11,7 @@
 
 #include <iostream>
 using namespace std;
-extern vector<double3> boundaryParticles;
+extern vector<float3> boundaryWall;
 
 
 bufflist fbuf;
@@ -25,10 +25,8 @@ uint ParticleVAO[2];
 extern "C" cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 extern struct cudaGraphicsResource *cuda_vbo_resource[2];
  __constant__ ParticleParams _param;
- //struct ParticleParams _param;
-//__device__ __constant__ float deviceArray[10];
 
- const float radius = 0.025;
+ const float radius = 0.018;
  const float smoothRadius = radius * 4;
  const float densityRatio = 1;   //control neighborNum
  const float GridSize = smoothRadius / densityRatio;
@@ -129,12 +127,6 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
 		goto Error;
 	}
-
-	// cudaDeviceSynchronize waits for the kernel to finish, and returns
-	// any errors encountered during the launch.
-	
-
-	// Copy output vector from GPU buffer to host memory.
 	cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
@@ -163,45 +155,6 @@ inline __device__ __host__ int getGrid(float3& pos) {
 }
 __device__ inline void boxBoundaryForce(const float3& position, float3& force)
 {
-	const float  sim_scale = 1;
-	const float3 vec_bound_min = _param._minGridCorner;
-	const float3 vec_bound_max = _param._maxGridCorner ;
-	float  param_force_distance = 0.015;
-	float param_max_boundary_force = 2.0;
-	float param_inv_force_distance = 1.0/param_force_distance;
-	if (position.x < vec_bound_min.x + param_force_distance)
-	{
-	float3 boundForce= (FLOAT3_MUL_SCALAR( make_float3(1.0, 0.0, 0.0) , ((vec_bound_min.x + param_force_distance - position.x) * param_inv_force_distance * 2.0 * param_max_boundary_force)));
-	force = FLOAT3_ADD(force,boundForce);
-	}
-	if (position.x > vec_bound_max.x - param_force_distance)
-	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(-1.0, 0.0, 0.0) ,((position.x + param_force_distance - vec_bound_max.x) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
-	}
-
-	if (position.y < vec_bound_min.y + param_force_distance)
-	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 1.0, 0.0) , ((vec_bound_min.y + param_force_distance - position.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
-	}
-	if (position.y > vec_bound_max.y - param_force_distance)
-	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, -1.0, 0.0) , ((position.y + param_force_distance - vec_bound_max.y) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
-	}
-
-	if (position.z < vec_bound_min.z + param_force_distance)
-	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, 1.0) , ((vec_bound_min.z + param_force_distance - position.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
-	}
-
-	if (position.z > vec_bound_max.z - param_force_distance)
-	{
-		float3 boundForce = FLOAT3_MUL_SCALAR(make_float3(0.0, 0.0, -1.0) , ((position.z + param_force_distance - vec_bound_max.z) * param_inv_force_distance * 2.0 * param_max_boundary_force));
-		force = FLOAT3_ADD(force, boundForce);
-	}
 }
 int getGridCpu(float3& pos) {
 	int gridx = (pos.x - minOuterBound.x) / GridSize;
@@ -209,8 +162,11 @@ int getGridCpu(float3& pos) {
 	int gridz = ((pos.z - minOuterBound.z) / GridSize);
 	if (gridx >= 0 && gridx < outerGridDim.x&&gridy >= 0 && gridy < outerGridDim.y&&gridz >= 0 && gridz < outerGridDim.z)
 		return  gridz + gridy * outerGridDim.z + gridx * outerGridDim.z*outerGridDim.y;
-	else
+	else {
+		cout << "error" <<pos.x<<' '<< pos.y << ' '<< pos.z << ' ' << endl;
 		return UNDEF_GRID;
+	}
+		
 
 }
 float poly6kernelGradientCpu(float dist) {
@@ -248,12 +204,6 @@ __global__ void CountParticleInGrid(float3* p,bufflist fbuf) {
 	float3 point = p[i];
 	const float3 vec_bound_min = _param._minGridCorner;
 	const float3 vec_bound_max = _param._maxGridCorner;
-	//if (point.x<vec_bound_min.x || point.x>vec_bound_max.x ||
-	//	point.y<vec_bound_min.y || point.y>vec_bound_max.y ||
-	//	point.z<vec_bound_min.z || point.x>vec_bound_max.z) {
-	//	//atomicAdd(&fbuf.max_predicted_density[0], 1);
-	//}
-	//else
 	{
 		int gridIndex = getGrid(point);
 		if (gridIndex == UNDEF_GRID)
@@ -302,7 +252,6 @@ void Setup() {
 	 outerGridNum = outerGridDim.x*outerGridDim.y*outerGridDim.z; //including ghost particles
 	  blocksize_p=dim3((uint)ceil(waterRange.x / initialDistance), (uint)ceil(waterRange.y / initialDistance));
 	  gridsize_p=dim3((uint)ceil(waterRange.z / initialDistance)); //1 dimension
-
 																 //dim3 blocksize_grid(outerGridDim.x, outerGridDim.y);
 	  gridsize_grid=dim3((uint)outerGridDim.z);
 	glGenBuffers(2, &Location[0]);
@@ -333,86 +282,12 @@ void Setup() {
 	posy = posz - initialDistance * (int)((posy - minGridCorner.y) / initialDistance);
 	posz = posz - initialDistance * (int)((posz - minGridCorner.z) / initialDistance);
 
-	while (true)
-	{
-		if (posx - initialDistance > minOuterBound.x)
-			posx -= initialDistance;
-		else break;
-	}
-	while (true)
-	{
-		if (posy - initialDistance > minOuterBound.y)
-			posy -= initialDistance;
-		else break;
-	}
-	while (true)
-	{
-		if (posz - initialDistance > minOuterBound.z)
-			posz -= initialDistance;
-		else break;
-	}
-	float vertices[] = {
-		-0.52f, -0.52f, -0.52f,  
-		0.52f,  0.52f, -0.52f,  
-		0.52f, -0.52f, -0.52f, 
-		-0.52f, -0.52f, -0.52f,  
-		-0.52f,  0.52f, -0.52f,  
-		0.52f,  0.52f, -0.52f,  
-
-		-0.52f, -0.52f,  0.52f, 
-		0.52f, -0.52f,  0.52f,  
-		0.52f,  0.52f,  0.52f,  
-		0.52f,  0.52f,  0.52f,  
-		-0.52f,  0.52f,  0.52f,  
-		-0.52f, -0.52f,  0.52f, 
-
-		-0.52f,  0.52f, -0.52f,  
-		-0.52f, -0.52f, -0.52f,  
-		-0.52f,  0.52f,  0.52f,  
-		-0.52f, -0.52f,  0.52f,  
-		-0.52f,  0.52f,  0.52f,  
-		-0.52f, -0.52f, -0.52f,  
-
-		0.52f,  0.52f, -0.52f,  
-		0.52f,  0.52f,  0.52f,  
-		0.52f, -0.52f, -0.52f,  
-		0.52f, -0.52f,  0.52f, 
-		0.52f, -0.52f, -0.52f,  
-		0.52f,  0.52f,  0.52f,   
-		//bottom
-		-0.52f, -0.52f, -0.52f,   
-		0.52f, -0.52f, -0.52f,   
-		0.52f, -0.52f,  0.52f,   
-		-0.52f, -0.52f,  0.52f,   
-		-0.52f, -0.52f, -0.52f,   
-		0.52f, -0.52f,  0.52f,
-		-0.52f, 0.52f, -0.52f,
-		0.52f, 0.52f, -0.52f,
-		0.52f, 0.52f,  0.52f,
-		-0.52f, 0.52f,  0.52f,
-		-0.52f, 0.52f, -0.52f,
-		0.52f, 0.52f,  0.52f,
-	};
-	//for (int i = 0; i < 6; i++) {
-	//	float dir1 = startBound[i].x == startBound[i].y;
-
-	//}
-
-	/*for (float px=posx; px < maxGridCorner.x + smoothRadius; px += initialDistance) {
-		for (float py=posy; py < maxGridCorner.y + smoothRadius; py += initialDistance) {
-			for (float pz=posz ; pz < maxGridCorner.z + smoothRadius; pz += initialDistance) {
-				if (px > minGridCorner.x  && px<maxGridCorner.x  &&
-					py>minGridCorner.y  && py<maxGridCorner.x  &&
-					pz>minGridCorner.z && pz < maxGridCorner.x)
-					continue;
-
-				ghostPos.push_back({ px,py,pz });
-			}
-		}
+	ghostPos=boundaryWall;
+	/*for (int i = 0; i < boundaryWall.size(); i++) {
+		assert(boundaryWall[i].x > -0.55);
+		ghostPos[i] = make_float3((float)boundaryWall[i].x, (float)boundaryWall[i].y, (float)boundaryWall[i].z);
 	}*/
-	ghostPos.resize(boundaryParticles.size());
-	for (int i = 0; i < boundaryParticles.size(); i++)
-		ghostPos[i] = make_float3((float)boundaryParticles[i].x, (float)boundaryParticles[i].y, (float)boundaryParticles[i].z);
+		
 	/*int lod = (int)ceilf(1.02/initialDistance);
 	for (int i = 0; i < 12;i++ ) {
 		addPointFormTriangle({ vertices[9 * i],vertices[9 * i + 1],vertices[9 * i + 2] },
@@ -432,17 +307,14 @@ void Setup() {
 	}
 	
 	cudaDeviceSynchronize();
-	//cudaMemcpyToSymbol(&_param, &cpuParam, sizeof(cpuParam), 0);
-	//__constant__ ParticleParams* _param1;
 	uint index = 0;
 	float gravity=9.0;
 	//float mass = 1.0;
 	float poly6kernel = 315.0f / (64.0f*M_PI*pow(smoothRadius, 3.0f));
 	float poly6kernelGrad = 945.0f / (32.0f*M_PI*pow(smoothRadius, 4.0f));
 	float boudary_force_factor = 25.0;
-	float time_step = 0.0004;
+	float time_step = 0.0005;
 	float spikykernelGrad = 45.0f / (M_PI*pow(smoothRadius, 4.0f));
-	
 	//{ minGridCorner ,maxGridCorner,GridIndexRange,GridSize,particleNum,gravity,mass,time_step,smoothRadius,restDensity,poly6kernel,poly6kernelGrad,density_error_factor,boudary_force_factor} ;
 	_param._minGridCorner = minGridCorner;
 	_param._maxGridCorner = maxGridCorner;
@@ -485,7 +357,6 @@ void Setup() {
 	CUDA_SAFE_CALL(cudaMalloc((void**)&fbuf.max_predicted_density, sizeof(float)));
 	CUDA_SAFE_CALL(cudaMalloc((void**)&fbuf.densityError, particleNum * sizeof(float)));
 	CUDA_SAFE_CALL(cudaMemset(fbuf.densityError, 0, particleNum * sizeof(float)));
-	
 	CUDA_SAFE_CALL(cudaMalloc((void**)&fbuf.grid_off, outerGridNum * sizeof(uint)));
 	CUDA_SAFE_CALL(cudaMalloc((void**)&fbuf.grid_particles_num, outerGridNum * sizeof(int)));
 	CUDA_SAFE_CALL(cudaMemset(fbuf.grid_particles_num,0,outerGridNum*sizeof(int)));
@@ -623,7 +494,9 @@ void CountParticles(float3* input) {
 	
 	cudaDeviceSynchronize();
 }
-
+//__global__ void computeViscosity(bufflist fbuf) {
+//
+//}
 __global__ void rearrange(bufflist fbuf,float3* pos_old) {
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
 	uint index = fbuf.sort_index[tid];
@@ -638,9 +511,70 @@ __global__ void sortIndex(bufflist fbuf) {
 	fbuf.sort_index[tid] = particle_index;
 }
 __global__ void computeOtherForce(bufflist fbuf) {
+	//Gravity
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
-	fbuf.force[tid] = { 0,-_param.gravity,0 };
-	//boxBoundaryForce(fbuf.pos_update[tid], fbuf.force[tid]);
+	//fbuf.force[tid] = { 0,-_param.gravity,0 };
+	float3 nonPressureforce = { 0,-_param.gravity,0 };
+	//Viscosity
+	float3 & ipos = fbuf.pos_update[tid];
+	float3 & ivel = fbuf.vel_update[tid];
+	uint i_cell_index = fbuf.particle_grid_cell_index_update[tid];
+	int3 GridnumRange = _param.outerGridDim;
+	int cell_z = i_cell_index % (GridnumRange.z);
+	i_cell_index /= GridnumRange.z;
+	int cell_y = i_cell_index % (GridnumRange.y);
+	int cell_x = i_cell_index / GridnumRange.y;
+	for (int cell = 0; cell < neighborGridNum; cell++)
+	{
+		int cell_neighbor_x = cell_x + _param._neighbor_off[cell].x;
+		int cell_neighbor_y = cell_y + _param._neighbor_off[cell].y;
+		int cell_neighbor_z = cell_z + _param._neighbor_off[cell].z;
+		if (cell_neighbor_x < 0 || cell_neighbor_x >= _param.outerGridDim.x || cell_neighbor_y < 0 || cell_neighbor_y >= _param.outerGridDim.y || cell_neighbor_z < 0 || cell_neighbor_z >= _param.outerGridDim.z)
+			continue;
+		int neighbor_cell_index = cell_neighbor_z + cell_neighbor_y * GridnumRange.z + cell_neighbor_x * GridnumRange.z*GridnumRange.y;
+		int cell_start = fbuf.grid_off[neighbor_cell_index];
+		int cell_end = cell_start + fbuf.grid_particles_num[neighbor_cell_index];
+		for (int j = cell_start; j < cell_end; j++)
+		{
+			//force.y++;
+			if (tid == j)
+			{
+				continue;
+			}
+			float3 vector_i_minus_j = (ipos - fbuf.pos_update[j]);
+			
+			const float dist = length(vector_i_minus_j);
+			if (dist < _param.smooth_radius)
+			{
+				float3 vel_i_minus_j = ivel - fbuf.vel_update[j];
+				//float jdist = sqrt(dist_square);
+				float kernelGradientValue = poly6kernelGradient(dist);
+				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
+				nonPressureforce += 20.0*(_param.mass*_param.mass / _param.rest_density)*
+					dot(vector_i_minus_j, vel_i_minus_j) / (0.01 + dist)*kernelGradient;
+			}
+		}
+		int ghost_cell_start = fbuf.ghost_grid_off[neighbor_cell_index];
+		int ghost_cell_end = ghost_cell_start + fbuf.ghost_grid_particles_num[neighbor_cell_index];
+		for (int j = ghost_cell_start; j < ghost_cell_end; j++)
+		{
+			
+			float3 vector_i_minus_j = ipos - fbuf.ghost_pos[j];
+			const float dist = length(vector_i_minus_j);
+
+			if (dist < _param.smooth_radius)
+			{
+				float3 vel_i_minus_j = ivel;
+				//float jdist = sqrt(dist_square);
+				float kernelGradientValue = poly6kernelGradient(dist);
+				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
+				nonPressureforce += 1.0*(_param.mass*_param.mass / _param.rest_density)*
+				dot(vector_i_minus_j, vel_i_minus_j)*fbuf.ghost_volum[j] / (0.01 + dist)*kernelGradient;
+			}
+		}
+	}
+	fbuf.force[tid] = nonPressureforce;
+	
 }
 __device__ void collisionHandling(float3* pos,float3* vel) {
 	//const float3 vec_bound_min = _param._minGridCorner;
@@ -878,9 +812,6 @@ __global__ void ComputePressureForce(bufflist fbuf,float3* predicted_pos) {
 			int ghost_cell_end = ghost_cell_start + fbuf.ghost_grid_particles_num[neighbor_cell_index];
 			for (int cndx = ghost_cell_start; cndx < ghost_cell_end; cndx++)
 			{
-				////force.y++;
-				//if (tid == 0)
-				//	printf("dist: %f\n", cndx);
 				int j = cndx;
 				float3 vector_i_minus_j = ipos- fbuf.ghost_pos[j];
 				const float dist = length(vector_i_minus_j);
@@ -891,8 +822,6 @@ __global__ void ComputePressureForce(bufflist fbuf,float3* predicted_pos) {
 					float3 kernelGradient = vector_i_minus_j*(( kernelGradientValue/ dist)*fbuf.ghost_volum[j]);
 					float grad = 0.5f * (ipress) * rest_volume * rest_volume;
 					forceB -= kernelGradient * grad;
-					//force = FLOAT3_SUB(force, FLOAT3_MUL_SCALAR(kernelGradient, grad));
-					
 				}
 			}
 		}
@@ -1035,8 +964,8 @@ void PredictonCorrection(float3* output) {
 	CUDA_SAFE_CALL(cudaMemset(fbuf.correction_pressure,0, sizeof(float)*particleNum));
 	ComputePredictedDensityAndPressure << <gridsize_p, blocksize_p >> >(fbuf, output);
 	while (cnt < 1||(densityErrorLarge&&cnt<ITERATION_MAX_NUM)) {
-		auto input1 = vector<float3>(particleNum);
-		auto input2 = vector<float>(particleNum);
+		//auto input1 = vector<float3>(particleNum);
+		//auto input2 = vector<float>(particleNum);
 
 		//cudaDeviceSynchronize();
 #ifdef TEST

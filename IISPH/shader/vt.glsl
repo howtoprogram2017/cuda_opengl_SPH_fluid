@@ -17,9 +17,10 @@ void main()
 {
 	Size = WordSize*(SCR_DIM*w) / sqrt(dot(aPos - eyePos, aPos - eyePos));
 	gl_PointSize = Size;
-	vec4 screenPos4 = ViewMatrix * vec4(aPos, 1.0);
-	ScreenDepth = -screenPos4.z / screenPos4.w;
+	vec4 screenPos4 = ViewMatrix * vec4(aPos, 1.0f);
 	gl_Position = MVP * vec4(aPos, 1.0f);
+	ScreenDepth = -screenPos4.z/ screenPos4.w;
+	
 	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
 }
 

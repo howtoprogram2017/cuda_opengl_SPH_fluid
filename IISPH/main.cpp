@@ -23,7 +23,9 @@
 #include "stb_image.h"
 #include "sphere.h"
 #include "BoundaryData.h"
-vector<double3> boundaryParticles;
+vector<float3> boundaryWall;
+vector<double3> boundaryObject;
+
 
 //#include <cmath>
 using namespace glm;
@@ -48,7 +50,7 @@ mat4 wroldMatrix = mat4();
 mat4 viewMatrix = lookAt(vec3(0, 3, 0), vec3(0, 0, 0), vec3(0, 1, 0));
 string ProgramName;
 float mdistance = 3; vec3 eyepos = vec3(0, 3, 0);
-mat4 projectionMatrix = perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+mat4 projectionMatrix = perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.2f, 100.0f);
 vec4 LightPos = vec4(0.0,-300.0,0.0,1.0);
 #define testDuration(x) timer.start(); x; timer.stop();std::cout << timer.duration() << "ms" << std::endl;
 extern "C" cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
@@ -270,6 +272,7 @@ void UserInputSetup() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 }
+
 int main()
 {
 	ProgramName = " ss";
@@ -284,15 +287,45 @@ int main()
 	//loader.loadObj("BoundaryData/UnitBox.obj", &x, &mesh, &normal,&tex, scale);
 	PoissonDiskSampling sampler;
 	TriangleMesh geo;
-	loadObj(meshFileName, geo, scale);
-	
-	//sampler.sampleMesh(x.size(), &x[0], );
-	sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.02, 10, 1, boundaryParticles);
-	vector<float3> boudaryf;//= { {0.5f,0.5f,0.5f},{ 0.5f,0.5f,-0.5f },{ 0.5f,-0.5f,0.5f },{ -0.5f,0.5f,0.5f }
-	//,{-0.5f,0.5f,-0.5f}, {-0.5f,-0.5f,0.5f}, {0.5f,-0.5f,-0.5f}, {-0.5f,-0.5f,-0.5f} };
-	/*for (auto & b : boundaryParticles)
-		boudaryf.push_back({ (float)b.x,(float)b.y,(float)b.z });*/
+	TriangleMesh boxgeo; 
 
+	loadObj(meshFileName, boxgeo, scale);
+	loadObj("BoundaryData/Dragon_50k.obj", geo, { 0.6,0.6,0.5 });
+	vec3 offset(-0.3,-0.4,0.0);
+	for (auto& el : geo.getVertices()) {
+		//rotateX(a, radians(-angleY));
+		vec3 newPos = (rotateY(vec3((float)el.x, (float)el.y, (float)el.z), radians(90.0f)) + offset);
+		el = {newPos.x,newPos.y,newPos.z};
+		assert(el.x < -0.1);
+		assert(el.x > -0.55);
+
+	}
+	geo.updateVertexNormals();
+	//sampler.sampleMesh(x.size(), &x[0], );
+	vector<double3> boundaryDataD;
+	int preindNum = boxgeo.getVertices().size();
+	/*for (auto& vert : geo.getVertices()) {
+		boxgeo.addVertex(vert);
+	}
+	
+	for (int i = 0; i < geo.getFaces().size(); i += 3) {
+		unsigned indices[] = { geo.getFaces()[i]+ preindNum,geo.getFaces()[i+1]+ preindNum,geo.getFaces()[i+2]+ preindNum };
+		boxgeo.addFace(indices);
+	}*/
+	
+	sampler.sampleMesh(boxgeo.numVertices(), boxgeo.getVertices().data(), boxgeo.numFaces(), boxgeo.getFaces().data(), 0.01, 10, 1, boundaryDataD);
+	//sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.010, 10, 1, boundaryDataD);
+
+	boxgeo.release();
+	
+	sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.015, 10, 1, boundaryDataD);
+	//vector<float3> boudaryf;//= { {0.5f,0.5f,0.5f},{ 0.5f,0.5f,-0.5f },{ 0.5f,-0.5f,0.5f },{ -0.5f,0.5f,0.5f }
+	//,{-0.5f,0.5f,-0.5f}, {-0.5f,-0.5f,0.5f}, {0.5f,-0.5f,-0.5f}, {-0.5f,-0.5f,-0.5f} };
+	for (auto & b : boundaryDataD)
+		boundaryWall.push_back({ (float)b.x,(float)b.y,(float)b.z });
+	boundaryDataD.clear();
+	//for (auto & b : boundaryDataD)
+	//	boundaryWall.push_back({ (float)b.x,(float)b.y,(float)b.z });
 	/*const int arraySize = 500;
 	 int a[arraySize] ;
 	memset(a, sizeof(a), 0);
@@ -314,7 +347,7 @@ int main()
 		return -1;
 	}
 
-	
+
 	glfwMakeContextCurrent(window);
 	glfwWindowHint(GLFW_SAMPLES, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -342,17 +375,18 @@ int main()
 
 	//glCreateShader(GL_VERTEX_SHADER);
 	GLSLShader render = GLSLShader::createFromShaderFile("shader/vt.glsl", "shader/fg.glsl");
-	GLSLShader Cube = GLSLShader::createFromShaderFile("shader/Simplevt.glsl", "shader/waterfg.glsl");
-	GLSLShader screen = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/screen.fs");
+	GLSLShader textured = GLSLShader::createFromShaderFile("shader/Simplevt.glsl", "shader/textured.fs");
+	GLSLShader screen = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/screenWater.fs");
 	GLSLShader Smooth = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/smooth.fs");
 	GLSLShader UpadeNorm = GLSLShader::createFromShaderFile("shader/screen.vt", "shader/updateNorm.fs");
 	//render.Use();
-	unsigned int VBO, VAO,vboTest,vaoTest;
-	glGenVertexArrays(1, &VAO);
+	unsigned int VBO, cubeVAO, vboTest, vaoTest, EBO;
+	glGenVertexArrays(1, &cubeVAO);
 	glGenVertexArrays(1, &vaoTest);
 	glGenBuffers(1, &VBO);
-
-	glBindVertexArray(VAO);
+	glGenBuffers(1, &EBO);
+	//unsigned indices[] = {0, 1, 2, 3, 4, 5};
+	glBindVertexArray(cubeVAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -371,7 +405,7 @@ int main()
 	glEnableVertexAttribArray(0);
 	sphere testsphere(8, particle.getRadius());
 	testsphere.generateBuffer();
-	particle.particleStepUp();
+	particle.particleSetUp();
 	UserInputSetup();
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
@@ -393,6 +427,11 @@ int main()
 		unsigned int DepthNormTex, DepthNormTex1;
 		glGenTextures(1, &DepthNormTex);
 		glGenTextures(1, &DepthNormTex1);
+		unsigned int rbo1;
+		glGenRenderbuffers(1, &rbo1);
+		glBindRenderbuffer(GL_RENDERBUFFER, rbo1);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo1);
 		glBindTexture(GL_TEXTURE_2D, DepthNormTex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -433,9 +472,31 @@ int main()
 		stbi_image_free(data);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	//}
+		vector<vec3> vertexes;
+		 offset = { -0.0,-0.0,0.0 };
+		for (auto& el:geo.getVertices()) {
+			//rotateX(a, radians(-angleY));
+			vertexes.push_back( vec3( (float)el.x,(float)el.y,(float)el.z ));
+		}
+		unsigned StaticObjectVA0;
+		unsigned StaticObjectVB0;
+		unsigned StaticObjectEB0;
+		glGenBuffers(1, &StaticObjectVB0);
+		glGenBuffers(1, &StaticObjectEB0);
+		glGenVertexArrays(1, &StaticObjectVA0);
+		glBindVertexArray(StaticObjectVA0);
+		glBindBuffer(GL_ARRAY_BUFFER, StaticObjectVB0);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float3)*vertexes.size(), &vertexes[0], GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, StaticObjectEB0);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, geo.getFaces().size() * sizeof(unsigned int), &geo.getFaces()[0], GL_STATIC_DRAW);
+		//vertexes.clear();
+
+		//glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		/*unsigned boundary;
 		glGenBuffers(1, &boundary);
 		glBindBuffer(GL_ARRAY_BUFFER, boundary);
@@ -450,16 +511,12 @@ int main()
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClear(GL_COLOR_BUFFER_BIT |GL_DEPTH_BUFFER_BIT);
-		
+		glEnable(GL_DEPTH_TEST);
 		eyepos = glm::rotateX(vec3(0, 0.0, -mdistance), radians(-angleY));
 		eyepos = rotateY(eyepos, radians(-angleX));
 		viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
 		mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
-		/*screen.Use();
-		glPointSize(10.0f);
-		glUniform1i(screen("State"), 1);
-		glUniformMatrix4fv(screen("MVP"), 1, GL_FALSE, value_ptr(mvp));
-		glDrawArrays(GL_POINTS, 0, boudaryf.size());*/
+		w = projectionMatrix[0].x;
 
 		{
 			
@@ -469,34 +526,29 @@ int main()
 									 // make sure we clear the framebuffer's content
 			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-			eyepos = glm::rotateX(vec3(0, 0.0, -mdistance), radians(-angleY));
-			eyepos = rotateY(eyepos, radians(-angleX));
 			viewMatrix = lookAt(eyepos, vec3(0, 0, 0), vec3(0, 1, 0));
 			vec4 LightPosView4 = viewMatrix * LightPos;
 			vec3 LightPosView = { LightPosView4.x / LightPosView4.w,LightPosView4.y / LightPosView4.w,LightPosView4.z / LightPosView4.w };
 			glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-			mat4 mvp = projectionMatrix * viewMatrix * wroldMatrix;
-			w=projectionMatrix[0].x;
+			
 			render.Use();
 			glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
 			glUniformMatrix4fv(render("ViewMatrix"), 1, GL_FALSE, value_ptr(viewMatrix));
-			glUniform1f(render("w"),w);
-			glUniform1f(render("WordSize"), particle.getSmoothRadius()/2.30);
-			glUniform3fv(render("eyePos"),1,value_ptr(eyepos));
+			glUniform1f(render("w"), w);
+			glUniform1f(render("WordSize"), particle.getSmoothRadius() / 2.30);
+			glUniform3fv(render("eyePos"), 1, value_ptr(eyepos));
 			//glEnable(GL_DEPTH_TEST);
-		//	glBindVertexArray(VAO);
+			//	glBindVertexArray(VAO);
 			glEnable(GL_PROGRAM_POINT_SIZE);
-			
 			glEnable(GL_POINT_SPRITE);
 			glBindVertexArray(particle.getRenderVBO());
 			glDrawArrays(GL_POINTS, 0, particle.getParticleNum());
-			glBindBuffer(GL_ARRAY_BUFFER,0);
-			glDisable(GL_CULL_FACE);
-			glDisable(GL_PROGRAM_POINT_SIZE);	
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glDisable(GL_PROGRAM_POINT_SIZE);
 			glDisable(GL_POINT_SPRITE);
 			glDisable(GL_DEPTH_TEST);
-			int i = 20-1;
+			int smoothIteration = 20;
+			int i = smoothIteration -1;
 			while (i-->0)
 			{
 			
@@ -511,9 +563,14 @@ int main()
 				swap(DepthNormTex, DepthNormTex1);
 				swap(framebuffer, framebuffer1);
 			}
+			/*if (smoothIteration & 1) {
+				swap(DepthNormTex, DepthNormTex1);
+				swap(framebuffer, framebuffer1);
+			}*/
+				
 			UpadeNorm.Use();
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer1);
-			glClear(GL_COLOR_BUFFER_BIT);
+			glClear(GL_COLOR_BUFFER_BIT| GL_DEPTH_BUFFER_BIT);
 			glBindVertexArray(quadVAO);
 			glBindTexture(GL_TEXTURE_2D, DepthNormTex);
 			glUniform1f(Smooth("w"), w);
@@ -527,7 +584,10 @@ int main()
 			//glClear(GL_COLOR_BUFFER_BIT);
 
 			screen.Use();
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glEnable(GL_DEPTH_TEST);
+			
+
 			glUniform3fv(screen("LightPos"), 1, value_ptr(LightPosView));
 			glUniformMatrix4fv(screen("MVP"), 1, GL_FALSE, value_ptr(mvp));
 			glUniformMatrix4fv(screen("Projection"), 1, GL_FALSE, value_ptr(projectionMatrix));
@@ -535,18 +595,24 @@ int main()
 			glUniform1f(screen("w"), w);
 			glBindVertexArray(quadVAO);
 			glBindTexture(GL_TEXTURE_2D, DepthNormTex);	// use the color attachment texture as the texture of the quad plane
-			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glDrawArrays(GL_TRIANGLES, 0, 6); 
 			
-			{
-				glEnable(GL_CULL_FACE);
-				glCullFace(GL_FRONT);
-				glUniform1i(screen("State"), 1);
-				glBindTexture(GL_TEXTURE_2D,cubeTex);
-				
-				glBindVertexArray(VAO);
+		//	
+		//	
+				textured.Use();
+				glUniformMatrix4fv(textured("MVP"), 1, GL_FALSE, value_ptr(mvp));
+				glBindVertexArray(StaticObjectVA0);
+				glUniform1i(textured("State"), 2);
+
+				//
+				glDrawElements(GL_TRIANGLES, geo.getFaces().size(), GL_UNSIGNED_INT, (void*)0);
+				//glEnable(GL_CULL_FACE);
+				//glCullFace(GL_FRONT);
+				glUniform1i(textured("State"), 1);
+				glBindTexture(GL_TEXTURE_2D, cubeTex);
+
+				glBindVertexArray(cubeVAO);
 				glDrawArrays(GL_TRIANGLES, 0, 30);
-				glDisable(GL_CULL_FACE);
-			}
 			glDisable(GL_DEPTH_TEST);
 
 		}
@@ -576,3 +642,18 @@ int main()
 
 // Helper function for using CUDA to add vectors in parallel.
 
+//textured.Use();
+//glUniformMatrix4fv(textured("MVP"), 1, GL_FALSE, value_ptr(mvp));
+//glBindVertexArray(StaticObjectVA0);
+//glUniform1i(textured("State"), 2);
+//
+////
+//glDrawElements(GL_TRIANGLES, geo.getFaces().size(), GL_UNSIGNED_INT, (void*)0);
+//		//glEnable(GL_CULL_FACE);
+//		//glCullFace(GL_FRONT);
+//		glUniform1i(textured("State"), 1);
+//		glBindTexture(GL_TEXTURE_2D,cubeTex);
+//		
+//		glBindVertexArray(cubeVAO);
+//		glDrawArrays(GL_TRIANGLES, 0, 30);
+//glDisable(GL_CULL_FACE);

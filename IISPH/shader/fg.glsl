@@ -1,4 +1,5 @@
 #version 330 core
+#extension GL_ARB_conservative_depth : enable
 //#extension GL_ARB_conservative_depth : enable
 out vec4 Color;
 //in  float Size; //in world
@@ -16,8 +17,8 @@ uniform vec3 eyePos;
 	 if (r2>1.0) discard;
 	 N.z = -sqrt(1.0-r2);
 //	 N.z = -.5;
-  float depth = ScreenDepth + 2.0* WordSize *(N.z);
-  gl_FragDepth = depth/ (2.0*sqrt(dot(eyePos,eyePos)));   //clamp to [0,1]
-  Color=vec4(depth,0.0,0.0,1.0);
+  float depth = ScreenDepth + 1.0* WordSize *(N.z);
+  gl_FragDepth =  depth / (2.0*sqrt(dot(eyePos, eyePos)));   //clamp to [0,1]
+  Color=vec4(depth,0.0,1.0,1.0);
   /* code */
 }

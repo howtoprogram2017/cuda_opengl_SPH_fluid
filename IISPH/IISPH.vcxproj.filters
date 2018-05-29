@@ -60,9 +60,6 @@
     <None Include="shader\watervt.glsl">
       <Filter>shaderResource</Filter>
     </None>
-    <None Include="shader\screen.fs">
-      <Filter>shaderResource</Filter>
-    </None>
     <None Include="shader\screen.vt">
       <Filter>shaderResource</Filter>
     </None>
@@ -73,6 +70,12 @@
       <Filter>shaderResource</Filter>
     </None>
     <None Include="shader\Simplevt.glsl">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\screenWater.fs">
+      <Filter>shaderResource</Filter>
+    </None>
+    <None Include="shader\textured.fs">
       <Filter>shaderResource</Filter>
     </None>
   </ItemGroup>
