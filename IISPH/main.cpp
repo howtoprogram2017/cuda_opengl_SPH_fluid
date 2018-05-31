@@ -53,11 +53,10 @@ float mdistance = 3; vec3 eyepos = vec3(0, 3, 0);
 mat4 projectionMatrix = perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.2f, 100.0f);
 vec4 LightPos = vec4(0.0,-300.0,0.0,1.0);
 #define testDuration(x) timer.start(); x; timer.stop();std::cout << timer.duration() << "ms" << std::endl;
-extern "C" cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
 
 Timer timer;
-particleSystem particle;
+//fluid_system particle;
 
 void GetCursorPos(double&x, double&y) {
 	double x1, y1;
@@ -290,7 +289,7 @@ int main()
 	TriangleMesh boxgeo; 
 
 	loadObj(meshFileName, boxgeo, scale);
-	loadObj("BoundaryData/Dragon_50k.obj", geo, { 0.6,0.6,0.5 });
+	loadObj("BoundaryData/Dragon_50k.obj", geo, { 0.8,0.5,0.6 });
 	vec3 offset(-0.3,-0.4,0.0);
 	for (auto& el : geo.getVertices()) {
 		//rotateX(a, radians(-angleY));
@@ -300,7 +299,7 @@ int main()
 		assert(el.x > -0.55);
 
 	}
-	geo.updateVertexNormals();
+	//geo.updateVertexNormals();
 	//sampler.sampleMesh(x.size(), &x[0], );
 	vector<double3> boundaryDataD;
 	int preindNum = boxgeo.getVertices().size();
@@ -313,12 +312,12 @@ int main()
 		boxgeo.addFace(indices);
 	}*/
 	
-	sampler.sampleMesh(boxgeo.numVertices(), boxgeo.getVertices().data(), boxgeo.numFaces(), boxgeo.getFaces().data(), 0.01, 10, 1, boundaryDataD);
+	sampler.sampleMesh(boxgeo.numVertices(), boxgeo.getVertices().data(), boxgeo.numFaces(), boxgeo.getFaces().data(), 0.04, 10, 1, boundaryDataD);
 	//sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.010, 10, 1, boundaryDataD);
 
 	boxgeo.release();
 	
-	sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.015, 10, 1, boundaryDataD);
+	//sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.015, 10, 1, boundaryDataD);
 	//vector<float3> boudaryf;//= { {0.5f,0.5f,0.5f},{ 0.5f,0.5f,-0.5f },{ 0.5f,-0.5f,0.5f },{ -0.5f,0.5f,0.5f }
 	//,{-0.5f,0.5f,-0.5f}, {-0.5f,-0.5f,0.5f}, {0.5f,-0.5f,-0.5f}, {-0.5f,-0.5f,-0.5f} };
 	for (auto & b : boundaryDataD)
@@ -403,9 +402,10 @@ int main()
 	glBufferData(GL_ARRAY_BUFFER, sizeof(testVertices), testVertices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,0, (void*)0);
 	glEnableVertexAttribArray(0);
-	sphere testsphere(8, particle.getRadius());
+	fluid_system* particle = new IISPH_solver();
+	sphere testsphere(8, particle->getRadius());
 	testsphere.generateBuffer();
-	particle.particleSetUp();
+	particle->particleSetUp();
 	UserInputSetup();
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
@@ -507,7 +507,7 @@ int main()
 		handleinput(); 
 		float w;
 		if(!paused)
-		particle.step();
+		particle->step();
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClear(GL_COLOR_BUFFER_BIT |GL_DEPTH_BUFFER_BIT);
@@ -535,14 +535,14 @@ int main()
 			glUniformMatrix4fv(render("MVP"), 1, GL_FALSE, value_ptr(mvp));
 			glUniformMatrix4fv(render("ViewMatrix"), 1, GL_FALSE, value_ptr(viewMatrix));
 			glUniform1f(render("w"), w);
-			glUniform1f(render("WordSize"), particle.getSmoothRadius() / 2.30);
+			glUniform1f(render("WordSize"), particle->getSmoothRadius() / 2.30);
 			glUniform3fv(render("eyePos"), 1, value_ptr(eyepos));
 			//glEnable(GL_DEPTH_TEST);
 			//	glBindVertexArray(VAO);
 			glEnable(GL_PROGRAM_POINT_SIZE);
 			glEnable(GL_POINT_SPRITE);
-			glBindVertexArray(particle.getRenderVBO());
-			glDrawArrays(GL_POINTS, 0, particle.getParticleNum());
+			glBindVertexArray(particle->getRenderVBO());
+			glDrawArrays(GL_POINTS, 0, particle->getParticleNum());
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			glDisable(GL_PROGRAM_POINT_SIZE);
 			glDisable(GL_POINT_SPRITE);

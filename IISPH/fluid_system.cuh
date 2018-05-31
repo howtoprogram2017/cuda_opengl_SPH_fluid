@@ -25,24 +25,12 @@ using namespace std;
 if (error != cudaSuccess) { \
 	fprintf(stderr, "CUDA ERROR: : %s\n", cudaGetErrorString(error)); \
 }
-#define FLOAT3_ADD(a,b) make_float3(a.x+b.x,a.y+b.y,a.z+b.z)
-#define FLOAT3_SUB(a,b) make_float3(a.x-b.x,a.y-b.y,a.z-b.z)
-#define FlOAT3_NEG(a)  make_float3(-a.x,-b.y,-c.z)   
-#define FLOAT3_DOT(a,b)  (a.x*b.x+a.y*b.y+a.z*b.z)
-#define FLOAT3_MUL_SCALAR(f,v) make_float3(f.x*v,f.y*v,f.z*v)
+
 #define MAX(a,b) a>b?a:b
 
 const int neighborGridNum = 27;
 
-extern "C" {
-	uint getLocation();//VBO
-	void advectParticles(float3*,float3*);
-	void Setup();
-	void stepTime();
-	void prescanInt(int* input, int* output, int len, int numPerThread, int numBlock, int numThread);
-	void testf();
-	int getghostNum();
-}
+
 
 struct bufflist
 {
@@ -53,7 +41,7 @@ struct bufflist
 	float3*			force;
 	float*			correction_pressure;
 	float*			boudary_particle_pos; // ghost particle;
-	float*			predicted_density;
+	
 	float*			densityError;
 	float*			max_predicted_density;
 	uint*			particle_grid_cell_index;
@@ -70,20 +58,24 @@ struct bufflist
 	int*			ghost_grid_off;
 	float3*			ghost_pos;
 	float*	        ghost_volum;  
-	float3*			test_buff;
-	//int*			grid_active;
+	//for IIsph
+	float3*			Dii;
+	float*			aii;
+	float3*			sumDij_Pj;
+	float*			particle_density;
+	float*			advect_density;
+	float*			correction_pressure_update;
 
 };
 
 
 struct ParticleParams {
-	
+
 	float3 _minGridCorner;
 	float3 _maxGridCorner;
 	float3 minOuterBound;
 	float _GridSize;
 	int3 outerGridDim;
-
 	uint particleNum;   //same as grid num
 	float gravity;
 	float mass;
@@ -95,17 +87,58 @@ struct ParticleParams {
 	float spikykernelGradient;
 	float param_density_error_factor;
 	int3   _neighbor_off[neighborGridNum];   //might larger than actual neighbors
-	//static ParticleParams* createParam(float gravity, float mass, float time_step)() {return };
-	//ParticleParams(float gravity, float mass, float time_step):gravity(gravity), mass(mass),time_step(time_step){	};
+											 //static ParticleParams* createParam(float gravity, float mass, float time_step)() {return };
+											 //ParticleParams(float gravity, float mass, float time_step):gravity(gravity), mass(mass),time_step(time_step){	};
 };
-class particleSystem {
+class fluid_system {
 public:
-	void step() { stepTime(); }
-	GLuint getRenderVBO() { return getLocation(); };
+	virtual  void step() {};
+	virtual  GLuint getRenderVBO() { return 0; };
+	virtual uint getParticleNum() { return 0; };
+	virtual uint getGhostParticleNum() { return 0; };
+	virtual float getRadius() { return 0.0; };
+	virtual float getSmoothRadius() { return 0.0; };
+	virtual void particleSetUp() {};
+	void setTimeStep(float timestep) { time_step = time_step; };
+	void setRadius(float r) { radius = r; }
+	void setSmoothRadius(float sr) { smooth_radius = sr; };
+
+protected:
+	float radius= 0.020, smooth_radius= 4*radius, time_step=0.0005;
+};
+class PCISPH_solver :public fluid_system{
+public:
+	void step();
+	GLuint getRenderVBO();
 	uint getParticleNum();
-	uint getGhostParticleNum() { return getghostNum(); }
+	uint getGhostParticleNum();
 	float getRadius();
 	float getSmoothRadius();
-	void particleSetUp() { Setup();};
+	void particleSetUp();
+private:
+	void setUpParameter();
 };
 
+class IISPH_solver :public fluid_system {
+public:
+	void step();
+	GLuint getRenderVBO();
+
+	
+	
+	uint getParticleNum();
+	uint getGhostParticleNum();
+	float getRadius();
+	float getSmoothRadius();
+	void particleSetUp();
+private:
+	void setUpParameter();
+	float ReduceMax(float * input, float * output, int num);
+	void prescanInt(int * input, int * output, int len, int numPerThread, int numBlock, int numThread);
+	void IndexSort(float3 * pos_old);
+	void RelaxedJacobiIteration(float3 * output);
+	void ComputeBeforIteration();
+	void Advance(float3 * output);
+	void CountParticles(float3 * input);
+	void swapBuff();
+};
