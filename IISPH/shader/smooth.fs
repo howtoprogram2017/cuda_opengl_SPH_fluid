@@ -68,9 +68,9 @@ void main()
 
  float H=divN(TexCoords);
  //if(abs(H)<1.5)
-	if(H>0)
+	//if(H>0)
 	{
-	depth-=.5*H;
+	depth-=.15*H;
 	}
 	
 	 

@@ -7,12 +7,12 @@
 #include <thrust\reduce.h>
 #include <thrust\functional.h>
 #include <thrust\execution_policy.h>
-
+#include"timer.h"
 
 #include <iostream>
 using namespace std;
 extern vector<float3> boundaryWall;
-
+extern Timer timer;
 
 
 //#ifndef __CUDACC__
@@ -25,7 +25,7 @@ extern struct cudaGraphicsResource *cuda_vbo_resource[2];
 
 
 namespace IISPH {
-	float radius = 0.018;
+	float radius = 0.02;
 	float smoothRadius = radius * 4;
 	float densityRatio = 1;   //control neighborNum
 	float GridSize = smoothRadius / densityRatio;
@@ -36,7 +36,7 @@ namespace IISPH {
 	float3 minWaterCorner;
 	float3 maxWaterCorner;
 	float3 waterRange;
-	float restDensity = 1.0;
+	float restDensity = 1000.0;
 	uint influcedParticleNum = 50;
 	float mass = 4.0 * M_PI / (3 * influcedParticleNum)*pow(smoothRadius, 3.0f)*restDensity;
 	float initialDistance = pow(mass / restDensity, 1.0 / 3.0);
@@ -97,11 +97,16 @@ inline __host__ __device__ float poly6kernelVal(float dist) {
 	return _param.poly6kernel*(tmp*tmp*tmp);
 }
 inline __host__ __device__ float poly6kernelGradient(float dist) {
-	if (dist > _param.smooth_radius)
+	/*if (dist > _param.smooth_radius)
 		return 0;
 	float ratio = dist / _param.smooth_radius;
 	float tmp = 1 - ratio * ratio;
-	return _param.poly6kernelGradient*(-ratio * tmp*tmp);
+	return _param.poly6kernelGradient*(-ratio * tmp*tmp);*/
+	if (dist > _param.smooth_radius)
+		return 0;
+    float ratio = dist / _param.smooth_radius;
+	float tmp = 1 - ratio * ratio;
+	return _param.spikykernelGradient*(-1.0 * tmp*tmp);
 }
 
 inline __host__ __device__ float spikykernelGradient(float dist) {
@@ -175,7 +180,7 @@ __global__ void computeDensity(bufflist Ibuf) {
 			const float dist = length(vector_i_minus_j);
 			if (dist <= _param.smooth_radius )
 			{
-				float kernelValue = poly6kernelVal(dist) *Ibuf.ghost_volum[j];
+				float kernelValue =  poly6kernelVal(dist) *Ibuf.ghost_volum[j];
 				particle_density += kernelValue * _param.mass;
 
 			}
@@ -237,7 +242,7 @@ __global__ void AdvectionAndComputeDii(bufflist Ibuf) {
 			if (dist <= _param.smooth_radius )
 			{
 				
-				dii -= Ibuf.ghost_volum[j]* diiCoefficient * poly6kernelGradient(dist)/dist*(vector_i_minus_j);
+				dii -=  Ibuf.ghost_volum[j]* diiCoefficient * poly6kernelGradient(dist)/dist*(vector_i_minus_j);
 
 			}
 		}
@@ -302,20 +307,20 @@ __global__ void ComputeAdvectionDensityAndAii(bufflist Ibuf) {
 				float3 jvel = { 0.0,0.0,0.0 };
 				float3 gradVec = poly6kernelGradient(dist)/dist*(vector_i_minus_j);
 				densityAdv += _param.time_step* _param.mass*Ibuf.ghost_volum[j] *
-					dot(ivel - jvel, gradVec);
+					dot(ivel , gradVec);
 				float jdensity_square = _param.rest_density*_param.rest_density;
-				float3 dji = (_param.time_step*_param.time_step)*_param.mass / idensity_square * gradVec;
-				aii += _param.mass*dot(dii - dji, gradVec);
+				//float3 dji = (_param.time_step*_param.time_step)*_param.mass / idensity_square * gradVec;
+				aii += _param.mass*Ibuf.ghost_volum[j]*dot(dii, gradVec);
 			}
 		}
 	}
 	Ibuf.advect_density[tid] = densityAdv;
 	Ibuf.aii[tid] = aii;
-	Ibuf.correction_pressure[tid] = Ibuf.correction_pressure[tid]*0.5;
+	Ibuf.correction_pressure[tid] = 0.0;
 }
 __global__ void ComputeDij_Pj(bufflist Ibuf) {
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
-	float3 dij_pj = make_float3( 0.0);
+	float3 dij_pj = make_float3( 0.0,0.0,0.0);
 	uint i_cell_index = Ibuf.particle_grid_cell_index_update[tid];
 	int3 GridnumRange = _param.outerGridDim;
 	int cell_z = i_cell_index % (GridnumRange.z);
@@ -348,8 +353,8 @@ __global__ void ComputeDij_Pj(bufflist Ibuf) {
 			}
 		}
 	}
-	if (tid == 4)
-		printf("%f %f %f sumDijPj\n",Ibuf.pos_update[tid].x, Ibuf.pos_update[tid].y, Ibuf.pos_update[tid].z,dij_pj);
+	//if (tid == 4)
+	//	printf("%f %f %f sumDijPj\n",Ibuf.pos_update[tid].x, Ibuf.pos_update[tid].y, Ibuf.pos_update[tid].z,dij_pj);
 	Ibuf.sumDij_Pj[tid] = dij_pj;
 }
 __global__ void ComputeNewPressure(bufflist Ibuf) {
@@ -358,7 +363,7 @@ __global__ void ComputeNewPressure(bufflist Ibuf) {
 	float idensity_sqaure = Ibuf.particle_density[tid]* Ibuf.particle_density[tid];
 	float ipressure = Ibuf.correction_pressure[tid];
 	float sum = 0.0;
-	float omega = 0.2;
+	float omega = 0.452;
 	float3& isumDij_Pj = Ibuf.sumDij_Pj[tid];
 	uint i_cell_index = Ibuf.particle_grid_cell_index_update[tid];
 	int3 GridnumRange = _param.outerGridDim;
@@ -412,7 +417,7 @@ __global__ void ComputeNewPressure(bufflist Ibuf) {
 	float pressureDifference = _param.rest_density - Ibuf.advect_density[tid];
 	if (fabs(denom) > 0.0) {
 		newPressure = MAX( (1.0 - omega)*ipressure + (omega / aii) * (pressureDifference - sum),0.0);
-		Ibuf.densityError[tid] = aii * newPressure + sum - pressureDifference;
+		Ibuf.densityError[tid] = aii * newPressure+ sum - pressureDifference;
 	}
 	else {
 		newPressure = 0.0;
@@ -432,13 +437,13 @@ void IISPH_solver::setUpParameter()
 	maxGridCorner = { 0.5,0.5,0.5 };
 	OuterGridRange = maxGridCorner - minGridCorner + (2.0 * smoothRadius)*make_float3(1.0, 1.0, 1.0); //FLOAT3_ADD( FLOAT3_SUB(maxGridCorner,minGridCorner),make_float3(smoothRadius*2, smoothRadius*2, smoothRadius*2));
 	minOuterBound = make_float3(minGridCorner.x - smoothRadius,minGridCorner.y - smoothRadius,minGridCorner.z - smoothRadius );
-	minWaterCorner = { -0,-0.5,-0.5 };
-	maxWaterCorner = { 0.5,0.5,0.5 };
+	minWaterCorner = { -0.0f,-0.5,-0.5f };
+	maxWaterCorner = { 0.5,0.5,0.5f };
 	waterRange = maxWaterCorner - minWaterCorner;
-	restDensity = 1.0;
+	restDensity = 1000.0;
 	influcedParticleNum = 50;
-	initialDistance = pow(mass / restDensity, 1.0 / 3.0);
 	mass = 4.0 * M_PI / (3 * influcedParticleNum)*pow(smoothRadius, 3.0f)*restDensity;
+	initialDistance = pow(mass / restDensity, 1.0 / 3.0);
 	outerGridDim = { (int)ceil(OuterGridRange.x / GridSize),(int)ceil(OuterGridRange.y / GridSize) ,(int)ceil(OuterGridRange.z / GridSize) };
 	particleNum = (int)ceil(waterRange.x / initialDistance)*(int)ceil(waterRange.y / initialDistance)*(int)ceil(waterRange.z / initialDistance);  //a particle per grid
 	outerGridNum = outerGridDim.x*outerGridDim.y*outerGridDim.z; //including ghost particles
@@ -491,13 +496,13 @@ void IISPH_solver::particleSetUp()
 	float offsetX = (waterRange.x - (numX - 1)*initialDistance) / 2.0f;
 	float offsetY = (waterRange.y - (numY - 1)*initialDistance) / 2.0f;
 	float offsetZ = (waterRange.z - (numZ - 1)*initialDistance) / 2.0f;
-	float3 startPos = make_float3(offsetX + minWaterCorner.x, offsetY + minWaterCorner.y, offsetZ + minWaterCorner.z);
+	float3 startPos = make_float3(-offsetX + maxWaterCorner.x, -offsetY + maxWaterCorner.y, -offsetZ + maxWaterCorner.z);
 	for (int i = 0; i<numX; i++)
 		for (int j = 0; j<numY; j++)
 			for (int k = 0; k < numZ; k++) {
 				int index = k + numZ * j + i * numZ*numY;
 				float3 move = { i*initialDistance,j*initialDistance,k*initialDistance };
-				float3 pos = (startPos + move);
+				float3 pos = (startPos - move);
 
 				initialPos.push_back(pos);
 			}
@@ -620,7 +625,7 @@ void IISPH_solver::particleSetUp()
 				}
 			}
 		}
-		ghost_vol[i] = 1.0 / Wsum;
+		ghost_vol[i] = 1.5 / Wsum;
 	}
 	CUDA_SAFE_CALL(cudaMemcpy(Ibuf.ghost_volum, &ghost_vol[0], sizeof(float)*ghostnum, cudaMemcpyHostToDevice));
 	CUDA_SAFE_CALL(cudaMemcpy(Ibuf.ghost_grid_off, &ghost_grid_off[0], sizeof(int)*outerGridNum, cudaMemcpyHostToDevice));
@@ -639,10 +644,10 @@ GLuint IISPH_solver::getRenderVBO()
 	return ParticleVAO[0];
 }
 void IISPH_solver::swapBuff() {
-	swap(cuda_vbo_resource[0], cuda_vbo_resource[1]);
-	swap(Location[0], Location[1]);
-	swap(ParticleVAO[0], ParticleVAO[1]);
-	swap(Ibuf.vel_old, Ibuf.vel_update);
+	std::swap(cuda_vbo_resource[0], cuda_vbo_resource[1]);
+	std::swap(Location[0], Location[1]);
+	std::swap(ParticleVAO[0], ParticleVAO[1]);
+	std::swap(Ibuf.vel_old, Ibuf.vel_update);
 	//swap(Ibuf.particle_grid_cell_index, Ibuf.particle_grid_cell_index_update);
 }
 void IISPH_solver::CountParticles(float3* input) {
@@ -678,6 +683,7 @@ __global__ void computeOtherForceI(bufflist Ibuf) {
 	int3 GridnumRange = _param.outerGridDim;
 	int cell_z = i_cell_index % (GridnumRange.z);
 	i_cell_index /= GridnumRange.z;
+	float smooth_radius_square = _param.smooth_radius*_param.smooth_radius;
 	int cell_y = i_cell_index % (GridnumRange.y);
 	int cell_x = i_cell_index / GridnumRange.y;
 	for (int cell = 0; cell < neighborGridNum; cell++)
@@ -706,8 +712,8 @@ __global__ void computeOtherForceI(bufflist Ibuf) {
 				//float jdist = sqrt(dist_square);
 				float kernelGradientValue = poly6kernelGradient(dist);
 				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
-				nonPressureforce += 20.0*(_param.mass*_param.mass / _param.rest_density)*
-					dot(vector_i_minus_j, vel_i_minus_j) / (0.01 + dist)*kernelGradient;
+				nonPressureforce += 0.2*(_param.mass*_param.mass / _param.rest_density)*
+					dot(vector_i_minus_j, vel_i_minus_j) / (0.01*smooth_radius_square + dist*dist)*kernelGradient;
 			}
 		}
 		int ghost_cell_start = Ibuf.ghost_grid_off[neighbor_cell_index];
@@ -724,8 +730,8 @@ __global__ void computeOtherForceI(bufflist Ibuf) {
 				//float jdist = sqrt(dist_square);
 				float kernelGradientValue = poly6kernelGradient(dist);
 				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
-				nonPressureforce += 1.0*(_param.mass*_param.mass / _param.rest_density)*
-					dot(vector_i_minus_j, vel_i_minus_j)*Ibuf.ghost_volum[j] / (0.01 + dist)*kernelGradient;
+				nonPressureforce += 0.0*(_param.mass*_param.mass / _param.rest_density)*
+					dot(vector_i_minus_j, vel_i_minus_j)*Ibuf.ghost_volum[j] / (0.01*smooth_radius_square + dist * dist)*kernelGradient;
 			}
 		}
 	}
@@ -751,9 +757,10 @@ __global__ void ComputePressureForceI(bufflist Ibuf, float3* predicted_pos) {
 
 	const float3 ipos = Ibuf.pos_update[tid];
 	const float  ipress = Ibuf.correction_pressure[tid];
-	const float  mass = _param.mass;
+	const float  mass_sqaure = _param.mass*_param.mass;
+	const float idensity = Ibuf.particle_density[tid];
+	const float idensity2 = idensity * idensity;
 	const float  smooth_radius = _param.smooth_radius;
-	const float  rest_volume = mass / _param.rest_density;
 	float3 force = make_float3(0, 0, 0);
 	float3 forceB = make_float3(0, 0, 0);
 	for (int cell = 0; cell < neighborGridNum; cell++)
@@ -781,9 +788,10 @@ __global__ void ComputePressureForceI(bufflist Ibuf, float3* predicted_pos) {
 			const float dist = length(vector_i_minus_j); //dot(vector_i_minus_j, vector_i_minus_j);
 			if (dist < smooth_radius && dist > 0)
 			{
+				float jdensity_square = Ibuf.particle_density[j] * Ibuf.particle_density[j];
 				float kernelGradientValue = poly6kernelGradient(dist);
 				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
-				float grad = 0.5f * (ipress + Ibuf.correction_pressure[j]) * rest_volume * rest_volume;
+				float grad = mass_sqaure*(ipress/ idensity2 + Ibuf.correction_pressure[j]/jdensity_square);
 				force -= kernelGradient * grad;
 			}
 		}
@@ -798,8 +806,8 @@ __global__ void ComputePressureForceI(bufflist Ibuf, float3* predicted_pos) {
 			if (dist < smooth_radius && dist > 0)
 			{
 				float kernelGradientValue = poly6kernelGradient(dist);
-				float3 kernelGradient = vector_i_minus_j * ((kernelGradientValue / dist)*Ibuf.ghost_volum[j]);
-				float grad = 0.5f * (ipress)* rest_volume * rest_volume;
+				float3 kernelGradient = vector_i_minus_j * ((kernelGradientValue / dist));
+				float grad = mass_sqaure * (ipress)/idensity2* Ibuf.ghost_volum[j];
 				forceB -= kernelGradient * grad;
 			}
 		}
@@ -938,11 +946,10 @@ void IISPH_solver::RelaxedJacobiIteration(float3* output) {
 	int cnt = 0;
 	//CUDA_SAFE_CALL(cudaMemset(Ibuf.correction_pressure, 0, sizeof(float)*particleNum));
 	//ComputePredictedDensityAndPressure << <gridsize_p, blocksize_p >> >(Ibuf, output);
+	timer.timeAvgStart("SimulationLoop");
 	while (cnt < 2 || (densityErrorLarge&&cnt<ITERATION_MAX_NUM)) {
-		auto input1 = vector<float3>(particleNum);
-		auto input2 = vector<float>(particleNum);
 		densityErrorLarge = true;
-		cudaMemcpy(&input2[0], Ibuf.correction_pressure, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+		//cudaMemcpy(&input2[0], Ibuf.correction_pressure, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
 		//cudaDeviceSynchronize();
 #ifdef TEST
 		cudaMemcpy(&input1[0], Ibuf.pos_update, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
@@ -955,13 +962,13 @@ void IISPH_solver::RelaxedJacobiIteration(float3* output) {
 #ifdef TEST
 #endif // TEST
 
-		cudaMemcpy(&input2[0], Ibuf.ghost_volum, ghostnum * sizeof(float), cudaMemcpyDeviceToHost);
+		//cudaMemcpy(&input2[0], Ibuf.ghost_volum, ghostnum * sizeof(float), cudaMemcpyDeviceToHost);
 
 		ComputeNewPressure <<<gridsize_p, blocksize_p >>>(Ibuf);
 		//Safe
 		//cudaMemcpy(&input2[0], Ibuf.densityError, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
-		cudaMemcpy(&input2[0], Ibuf.correction_pressure_update, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
-		cudaMemcpy(&input2[0], Ibuf.densityError, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+		//cudaMemcpy(&input2[0], Ibuf.correction_pressure_update, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+		//cudaMemcpy(&input2[0], Ibuf.densityError, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
 
 		////cout << "density:" << endl;
 		//int ind = -1; float maxError=000.0;
@@ -989,24 +996,23 @@ void IISPH_solver::RelaxedJacobiIteration(float3* output) {
 		max_density_error = MAX(0, max_density_error);
 		if (max_density_error / restDensity < ErrorBound)
 			densityErrorLarge = false;
-		swap(Ibuf.correction_pressure,Ibuf.correction_pressure_update);
+		std::swap(Ibuf.correction_pressure,Ibuf.correction_pressure_update);
 		cnt++;
 	}
+	timer.timeAvgEnd("SimulationLoop",cnt);
 }
 
 void IISPH_solver::ComputeBeforIteration() {
-	auto input1 = vector<float>(particleNum);
-	auto input2 = vector<float3>(particleNum);
 	computeDensity << <gridsize_p, blocksize_p >> > (Ibuf);
-	cudaMemcpy(&input1[0], Ibuf.particle_density, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+	//cudaMemcpy(&input1[0], Ibuf.particle_density, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
 	
 	computeOtherForceI << <gridsize_p, blocksize_p >> >(Ibuf);
 	AdvectionAndComputeDii << <gridsize_p, blocksize_p >> > (Ibuf);
-	cudaMemcpy(&input2[0], Ibuf.Dii, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
+	//cudaMemcpy(&input2[0], Ibuf.Dii, particleNum * sizeof(float3), cudaMemcpyDeviceToHost);
 
 	ComputeAdvectionDensityAndAii << <gridsize_p, blocksize_p >> > (Ibuf);
-	cudaMemcpy(&input1[0], Ibuf.advect_density, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
-	cudaMemcpy(&input1[0], Ibuf.aii, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+	//cudaMemcpy(&input1[0], Ibuf.advect_density, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
+	//cudaMemcpy(&input1[0], Ibuf.aii, particleNum * sizeof(float), cudaMemcpyDeviceToHost);
 
 		
 }
@@ -1029,7 +1035,6 @@ void IISPH_solver::step()
 	//advectParticles(input, output);
 	//cudaDeviceSynchronize();
 	CountParticles(input);
-	auto input1 = vector<int>(outerGridNum);
 
 	//cudaMemcpy(&input1[0], Ibuf.grid_particles_num, GridNum * sizeof(int), cudaMemcpyDeviceToHost);
 	//for (int a : input1)

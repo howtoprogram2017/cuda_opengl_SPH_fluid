@@ -99,12 +99,12 @@ public:
 	virtual float getRadius() { return 0.0; };
 	virtual float getSmoothRadius() { return 0.0; };
 	virtual void particleSetUp() {};
-	void setTimeStep(float timestep) { time_step = time_step; };
+	void setTimeStep(float timestep) { this->time_step = timestep; };
 	void setRadius(float r) { radius = r; }
 	void setSmoothRadius(float sr) { smooth_radius = sr; };
 
 protected:
-	float radius= 0.020, smooth_radius= 4*radius, time_step=0.0005;
+	float radius= 0.015, smooth_radius= 4*radius, time_step=0.0005;
 };
 class PCISPH_solver :public fluid_system{
 public:

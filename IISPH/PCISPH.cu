@@ -7,12 +7,12 @@
 #include <thrust\reduce.h>
 #include <thrust\functional.h>
 #include <thrust\execution_policy.h>
-
+#include "timer.h"
 
 #include <iostream>
 using namespace std;
 extern vector<float3> boundaryWall;
-
+extern Timer timer;
 
 bufflist fbuf;
 uint Location[2];
@@ -105,7 +105,12 @@ inline __host__ __device__ float poly6kernelGradientPCI(float dist) {
 		return 0;
 	float ratio = dist / _param.smooth_radius;
 	float tmp = 1 - ratio * ratio;
-	return _param.poly6kernelGradient*(-ratio * tmp*tmp);
+	return _param.spikykernelGradient*(-1.0 * tmp*tmp);
+	//if (dist > _param.smooth_radius)
+	//	return 0;
+	//float ratio = dist / _param.smooth_radius;
+	//float tmp = 1 - ratio * ratio;
+	//return _param.poly6kernelGradient*(-ratio * tmp*tmp);
 }
 inline __host__ __device__ float spikykernelGradient(float dist) {
 	if (dist > _param.smooth_radius)
@@ -141,7 +146,7 @@ void ComputeDensityErrorFactor(vector<float3>& pos, int i) {
 		float3 pos_i_minus_j = (pos[i]-pos[j]);
 		float dist_square = dot(pos_i_minus_j,pos_i_minus_j);
 		float dist = sqrtf(dist_square);
-		float3 gradVec = (pos_i_minus_j* poly6kernelGradientCpu(dist)/dist);
+		float3 gradVec = (pos_i_minus_j* poly6kernelGradientPCI(dist)/dist);
 		GradWDot += dot(gradVec, gradVec);
 		GradW = (GradW+ gradVec);
 	}
@@ -174,7 +179,8 @@ void PCISPH_solver::setUpParameter()
 	 waterRange = maxWaterCorner - minWaterCorner;
 	 restDensity = 1000;
 	 influcedParticleNum = 50;
-	 mass = 4 * M_PI / (3 * influcedParticleNum)*pow(smoothRadius, 3.0f)*restDensity;
+	 mass = 4.0 * M_PI / (3 * influcedParticleNum)*pow(smoothRadius, 3.0f)*restDensity;
+	 initialDistance = pow(mass / restDensity, 1.0 / 3.0);
 	outerGridDim = { (int)ceil(OuterGridRange.x / GridSize),(int)ceil(OuterGridRange.y / GridSize) ,(int)ceil(OuterGridRange.z / GridSize) };
 	particleNum = (int)ceil(waterRange.x / initialDistance)*(int)ceil(waterRange.y / initialDistance)*(int)ceil(waterRange.z / initialDistance);  //a particle per grid
 	outerGridNum = outerGridDim.x*outerGridDim.y*outerGridDim.z; //including ghost particles
@@ -349,7 +355,7 @@ void PCISPH_solver::particleSetUp()
 				}
 			}
 		}
-		ghost_vol[i] = 1.0/ Wsum;
+		ghost_vol[i] = 1.5/ Wsum;
 	}
 	CUDA_SAFE_CALL(cudaMemcpy(fbuf.ghost_volum, &ghost_vol[0], sizeof(float)*ghostnum, cudaMemcpyHostToDevice));
 	CUDA_SAFE_CALL(cudaMemcpy(fbuf.ghost_grid_off,&ghost_grid_off[0],sizeof(int)*outerGridNum,cudaMemcpyHostToDevice));
@@ -406,6 +412,7 @@ __global__ void computeOtherForce(bufflist fbuf) {
 	float3 & ivel = fbuf.vel_update[tid];
 	uint i_cell_index = fbuf.particle_grid_cell_index_update[tid];
 	int3 GridnumRange = _param.outerGridDim;
+	float smooth_radius_square = _param.smooth_radius * _param.smooth_radius;
 	int cell_z = i_cell_index % (GridnumRange.z);
 	i_cell_index /= GridnumRange.z;
 	int cell_y = i_cell_index % (GridnumRange.y);
@@ -422,7 +429,7 @@ __global__ void computeOtherForce(bufflist fbuf) {
 		int cell_end = cell_start + fbuf.grid_particles_num[neighbor_cell_index];
 		for (int j = cell_start; j < cell_end; j++)
 		{
-			//force.y++;
+			////force.y++;
 			if (tid == j)
 			{
 				continue;
@@ -436,8 +443,8 @@ __global__ void computeOtherForce(bufflist fbuf) {
 				//float jdist = sqrt(dist_square);
 				float kernelGradientValue = poly6kernelGradientPCI(dist);
 				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
-				nonPressureforce += 20.0*(_param.mass*_param.mass / _param.rest_density)*
-					dot(vector_i_minus_j, vel_i_minus_j) / (0.01 + dist)*kernelGradient;
+				nonPressureforce += .2*(_param.mass*_param.mass / _param.rest_density)*
+					dot(vector_i_minus_j, vel_i_minus_j) / (0.01*smooth_radius_square + dist * dist)*kernelGradient;
 			}
 		}
 		int ghost_cell_start = fbuf.ghost_grid_off[neighbor_cell_index];
@@ -454,16 +461,15 @@ __global__ void computeOtherForce(bufflist fbuf) {
 				//float jdist = sqrt(dist_square);
 				float kernelGradientValue = poly6kernelGradientPCI(dist);
 				float3 kernelGradient = (vector_i_minus_j * kernelGradientValue / dist);
-				nonPressureforce += 1.0*(_param.mass*_param.mass / _param.rest_density)*
-				dot(vector_i_minus_j, vel_i_minus_j)*fbuf.ghost_volum[j] / (0.01 + dist)*kernelGradient;
+				nonPressureforce += 0.0*(_param.mass*_param.mass / _param.rest_density)*
+				dot(vector_i_minus_j, vel_i_minus_j)*fbuf.ghost_volum[j] / (0.01*smooth_radius_square + dist * dist)*kernelGradient;
 			}
 		}
 	}
 	fbuf.force[tid] = nonPressureforce;
 	
 }
-__device__ void collisionHandling(float3* pos,float3* vel) {
-}
+
 
 __global__ void PredictPosition(bufflist fbuf,float3 * output_pos) {
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
@@ -475,10 +481,7 @@ __global__ void PredictPosition(bufflist fbuf,float3 * output_pos) {
 	float3 acceleration = (fbuf.force[tid]+ fbuf.correction_pressure_force[tid])* (1.0f / _param.mass);
 
 	float3 predictedVelocity = (fbuf.vel_update[tid] + (acceleration* _param.time_step));
-
-	//float3 pos = FLOAT3_ADD(fbuf.pos_update[tid] , FLOAT3_MUL_SCALAR(predictedVelocity, _param.time_step));
 	float3 pos = (fbuf.pos_update[tid] + predictedVelocity * _param.time_step);
-	//collisionHandling(&pos, NULL);
 
 	output_pos[tid] = pos;
 }
@@ -645,9 +648,6 @@ __global__ void ComputePressureForce(bufflist fbuf,float3* predicted_pos) {
 		}
 
 		fbuf.correction_pressure_force[tid] = force+forceB;
-		/*if (tid == 0)
-			printf("pressure force fluid x: %f,y: %f,z: %f\n pressure force boudary x: %f,y: %f,z: %f\nself x:%f,y:%f,z:%f\n",
-				force.x,force.y,force.z,forceB.x,forceB.y,forceB.z,ipos.x,ipos.y,ipos.z);*/
 	
 }
 __global__ void scanSumInt(int * input, int * output, int *aux, int numPerthread) {
@@ -695,14 +695,11 @@ __global__ void advanceParticles(bufflist fbuf,float3* output) {
 	int tid = blockIdx.x*blockDim.x*blockDim.y + threadIdx.y*blockDim.x + threadIdx.x;
 	if (tid >= _param.particleNum)
 		return;
-
-	//float3 acceleration = FLOAT3_MUL_SCALAR( FLOAT3_ADD(fbuf.force[tid] , fbuf.correction_pressure_force[tid]), 1.0/ _param.mass);
 	float3 acceleration = (1.0 / _param.mass)*(fbuf.force[tid] + fbuf.correction_pressure_force[tid]);
 	float3 veval = fbuf.vel_update[tid];
 	veval += acceleration * _param.time_step;
 	float3 pos = fbuf.pos_update[tid];
 	pos += veval * _param.time_step;
-	collisionHandling(&pos, &veval);
 
 	output[tid] = pos;
 	fbuf.vel_update[tid] = (veval);
@@ -788,6 +785,7 @@ void RelaxedJacobiIteration(float3* output) {
 	int cnt = 0;
 	CUDA_SAFE_CALL(cudaMemset(fbuf.correction_pressure,0, sizeof(float)*particleNum));
 	ComputePredictedDensityAndPressure << <gridsize_p, blocksize_p >> >(fbuf, output);
+	timer.timeAvgStart("SimulationLoop");
 	while (cnt < 1||(densityErrorLarge&&cnt<ITERATION_MAX_NUM)) {
 		//auto input1 = vector<float3>(particleNum);
 		//auto input2 = vector<float>(particleNum);
@@ -840,6 +838,7 @@ void RelaxedJacobiIteration(float3* output) {
 		CUDA_SAFE_CALL(cudaDeviceSynchronize());
 		cnt++;
 	}
+	timer.timeAvgEnd("SimulationLoop",cnt);
 }
 void Advance(float3* output) {
 	advanceParticles << <gridsize_p, blocksize_p >> > (fbuf,output);
@@ -899,18 +898,6 @@ uint PCISPH_solver::getGhostParticleNum()
 
 void testf() {
 	int data[6000];
-	/*for (int i = 0; i < 6000; i++)
-		data[i] = i;
-	int result = thrust::reduce(data, data + 6000,
-		-1,
-		thrust::maximum<int>());
-	cout << result << endl;
-	float input[125];
-	for (int i = 0; i < 125; i++)
-		input[i] = rand()%125;
-	for (int a : input)
-		cout << a << " ";
-	cout << endl;*/
 	
 }
 

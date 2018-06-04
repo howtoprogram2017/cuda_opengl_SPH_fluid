@@ -274,6 +274,7 @@ void UserInputSetup() {
 
 int main()
 {
+
 	ProgramName = " ss";
 	//cin >> ProgramName;
 	OBJLoader loader;
@@ -289,7 +290,7 @@ int main()
 	TriangleMesh boxgeo; 
 
 	loadObj(meshFileName, boxgeo, scale);
-	loadObj("BoundaryData/Dragon_50k.obj", geo, { 0.8,0.5,0.6 });
+	loadObj("BoundaryData/Dragon_50k.obj", geo, { 0.8,0.8,0.6 });
 	vec3 offset(-0.3,-0.4,0.0);
 	for (auto& el : geo.getVertices()) {
 		//rotateX(a, radians(-angleY));
@@ -312,8 +313,8 @@ int main()
 		boxgeo.addFace(indices);
 	}*/
 	
-	sampler.sampleMesh(boxgeo.numVertices(), boxgeo.getVertices().data(), boxgeo.numFaces(), boxgeo.getFaces().data(), 0.04, 10, 1, boundaryDataD);
-	//sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.010, 10, 1, boundaryDataD);
+	sampler.sampleMesh(boxgeo.numVertices(), boxgeo.getVertices().data(), boxgeo.numFaces(), boxgeo.getFaces().data(), 0.01, 10, 1, boundaryDataD);
+	sampler.sampleMesh(geo.numVertices(), geo.getVertices().data(), geo.numFaces(), geo.getFaces().data(), 0.010, 10, 1, boundaryDataD);
 
 	boxgeo.release();
 	
@@ -403,9 +404,27 @@ int main()
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,0, (void*)0);
 	glEnableVertexAttribArray(0);
 	fluid_system* particle = new IISPH_solver();
-	sphere testsphere(8, particle->getRadius());
-	testsphere.generateBuffer();
+	//sphere testsphere(8, particle->getRadius());
+	//testsphere.generateBuffer();
+	particle->setTimeStep(0.0004);
+	particle->setRadius(0.015);
+	particle->setSmoothRadius(0.015*4.0);
 	particle->particleSetUp();
+	int nDevices;
+	cudaGetDeviceCount(&nDevices);
+	for (int i = 0; i < nDevices; i++) {
+		cudaDeviceProp prop;
+		cudaGetDeviceProperties(&prop, i);
+		printf("Device Number: %d\n", i);
+		printf("  Device name: %s\n", prop.name);
+		printf("  Memory Clock Rate (KHz): %d\n",
+			prop.memoryClockRate);
+		printf("  Memory Bus Width (bits): %d\n",
+			prop.memoryBusWidth);
+		printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+			2.0*prop.memoryClockRate*(prop.memoryBusWidth / 8) / 1.0e6);
+	}
+
 	UserInputSetup();
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
@@ -428,10 +447,10 @@ int main()
 		glGenTextures(1, &DepthNormTex);
 		glGenTextures(1, &DepthNormTex1);
 		unsigned int rbo1;
-		glGenRenderbuffers(1, &rbo1);
-		glBindRenderbuffer(GL_RENDERBUFFER, rbo1);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo1);
+		//glGenRenderbuffers(1, &rbo1);
+		//glBindRenderbuffer(GL_RENDERBUFFER, rbo1);
+		//glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
+		//glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo1);
 		glBindTexture(GL_TEXTURE_2D, DepthNormTex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -494,7 +513,7 @@ int main()
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, StaticObjectEB0);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, geo.getFaces().size() * sizeof(unsigned int), &geo.getFaces()[0], GL_STATIC_DRAW);
-		//vertexes.clear();
+		vertexes.clear();
 
 		//glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		/*unsigned boundary;
@@ -506,6 +525,7 @@ int main()
 	do {
 		handleinput(); 
 		float w;
+		timer.timeAvgStart("AllIteration");
 		if(!paused)
 		particle->step();
 		
@@ -547,7 +567,7 @@ int main()
 			glDisable(GL_PROGRAM_POINT_SIZE);
 			glDisable(GL_POINT_SPRITE);
 			glDisable(GL_DEPTH_TEST);
-			int smoothIteration = 20;
+			int smoothIteration = 2;
 			int i = smoothIteration -1;
 			while (i-->0)
 			{
@@ -616,8 +636,12 @@ int main()
 			glDisable(GL_DEPTH_TEST);
 
 		}
-
-
+		timer.timeAvgEnd("AllIteration");
+		if(timer.getCount("AllIteration")%50==0){
+			timer.printAvg("AllIteration");
+			timer.printCountRatio("AllIteration", "SimulationLoop");
+		}
+		
 		{
 			//glBindBuffer(GL_ARRAY_BUFFER,particle.getRenderVBO());
 			//glVertexAttribDivisor(0, 0); // particles vertices : always reuse the same 4 vertices -> 0
